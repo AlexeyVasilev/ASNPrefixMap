@@ -1,0 +1,4 @@
+{"type":"announce","peer":"rrc00|192.0.2.1|64500","prefix":"8.8.8.0/24","asn":15169}
+{"type":"announce","peer":"rrc00|192.0.2.2|64501","prefix":"8.8.8.0/24","asn":15169}
+{"type":"announce","peer":"rrc00|192.0.2.3|64502","prefix":"1.1.1.0/24","asn":13335}
+{"type":"withdraw","peer":"rrc00|192.0.2.1|64500","prefix":"8.8.8.0/24"}

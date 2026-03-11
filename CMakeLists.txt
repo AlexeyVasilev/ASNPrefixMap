@@ -1,0 +1,35 @@
+cmake_minimum_required(VERSION 3.16)
+project(ASNPrefixMap VERSION 0.1.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(FetchContent)
+
+find_package(nlohmann_json CONFIG QUIET)
+
+if (NOT nlohmann_json_FOUND)
+    find_path(NLOHMANN_JSON_INCLUDE_DIR nlohmann/json.hpp)
+
+    if (NLOHMANN_JSON_INCLUDE_DIR)
+        add_library(nlohmann_json INTERFACE)
+        add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+        target_include_directories(nlohmann_json INTERFACE ${NLOHMANN_JSON_INCLUDE_DIR})
+    else()
+        FetchContent_Declare(
+            nlohmann_json
+            URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+        )
+        FetchContent_MakeAvailable(nlohmann_json)
+    endif()
+endif()
+
+add_executable(ASNPrefixMap
+    src/main.cpp
+    src/config.cpp
+    src/routing_state.cpp
+)
+
+target_include_directories(ASNPrefixMap PRIVATE src)
+target_link_libraries(ASNPrefixMap PRIVATE nlohmann_json::nlohmann_json)
