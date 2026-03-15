@@ -1,43 +1,55 @@
 #include "config.h"
+#include "parser/ris_live_parser.h"
 #include "routing_state.h"
+#include "source/bgp_source.h"
+#include "source/file_jsonl_source.h"
+#include "source/ris_live_websocket_source.h"
 
-#include <fstream>
+#include <memory>
 #include <iostream>
+#include <stdexcept>
 #include <string>
+#include <vector>
 
-#include <nlohmann/json.hpp>
+namespace {
 
-using json = nlohmann::json;
+std::unique_ptr<BgpSource> create_source(const Config& cfg) {
+    if (cfg.source == "file_jsonl") {
+        return std::make_unique<FileJsonlSource>(cfg.input_file);
+    }
+
+    if (cfg.source == "ris_live_ws") {
+        return std::make_unique<RisLiveWebSocketSource>(
+            cfg.ris_live_host,
+            cfg.ris_live_port,
+            cfg.ris_live_target);
+    }
+
+    throw std::runtime_error("Unsupported source: " + cfg.source);
+}
+
+void apply_events(const std::vector<BgpEvent>& events, RoutingState& state) {
+    for (const auto& event : events) {
+        if (event.type == EventType::Announce) {
+            state.announce(event.peer, event.prefix, event.asn);
+        } else if (event.type == EventType::Withdraw) {
+            state.withdraw(event.peer, event.prefix);
+        }
+    }
+}
+
+}  // namespace
 
 int main() {
     try {
         const Config cfg = load_config("config.ini");
         RoutingState state;
+        std::unique_ptr<BgpSource> source = create_source(cfg);
 
-        std::ifstream input(cfg.input_file);
-        if (!input) {
-            std::cerr << "Failed to open input file: " << cfg.input_file << '\n';
-            return 1;
-        }
-
-        std::string line;
-        while (std::getline(input, line)) {
-            if (line.empty()) {
-                continue;
-            }
-
-            const auto event = json::parse(line);
-
-            const std::string type = event.at("type").get<std::string>();
-            const std::string peer = event.at("peer").get<std::string>();
-            const std::string prefix = event.at("prefix").get<std::string>();
-
-            if (type == "announce") {
-                const uint32_t asn = event.at("asn").get<uint32_t>();
-                state.announce(peer, prefix, asn);
-            } else if (type == "withdraw") {
-                state.withdraw(peer, prefix);
-            }
+        std::string message;
+        while (source->next_message(message)) {
+            const std::vector<BgpEvent> events = parse_ris_live_message(message);
+            apply_events(events, state);
         }
 
         state.export_tables(cfg.prefix_output, cfg.asn_output);

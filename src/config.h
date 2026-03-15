@@ -7,6 +7,9 @@ struct Config {
     std::string input_file;
     std::string prefix_output;
     std::string asn_output;
+    std::string ris_live_host;
+    std::string ris_live_port;
+    std::string ris_live_target;
 };
 
 Config load_config(const std::string& path);

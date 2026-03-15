@@ -25,6 +25,10 @@ std::string trim(std::string value) {
 
 Config load_config(const std::string& path) {
     Config cfg;
+    cfg.source = "file_jsonl";
+    cfg.ris_live_host = "ris-live.ripe.net";
+    cfg.ris_live_port = "443";
+    cfg.ris_live_target = "/v1/ws/";
 
     std::ifstream file(path);
     if (!file) {
@@ -54,6 +58,12 @@ Config load_config(const std::string& path) {
             cfg.prefix_output = value;
         } else if (key == "asn_output") {
             cfg.asn_output = value;
+        } else if (key == "ris_live_host") {
+            cfg.ris_live_host = value;
+        } else if (key == "ris_live_port") {
+            cfg.ris_live_port = value;
+        } else if (key == "ris_live_target") {
+            cfg.ris_live_target = value;
         }
     }
 

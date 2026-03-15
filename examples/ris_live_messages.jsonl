@@ -1,0 +1,5 @@
+{"type":"ris_message","data":{"type":"UPDATE","host":"rrc00","peer":"192.0.2.1","peer_asn":64500,"timestamp":1710000000,"path":[64500,64496,15169],"announcements":[{"next_hop":"192.0.2.1","prefixes":["8.8.8.0/24","8.8.4.0/24"]}],"withdrawals":["9.9.9.0/24"]}}
+{"type":"ris_message","data":{"type":"UPDATE","host":"rrc10","peer":"198.51.100.2","peer_asn":64510,"timestamp":1710000100,"path":[64510,"{64497,64498}"],"announcements":[{"prefixes":["203.0.113.0/24"]}]}}
+{"type":"ris_message","data":{"type":"UPDATE","host":"rrc20","peer":"203.0.113.5","peer_asn":64520,"withdrawals":["198.51.100.0/24","198.51.101.0/24"]}}
+{"type":"ris_message","data":{"type":"KEEPALIVE","host":"rrc30","peer":"203.0.113.10","peer_asn":64530}}
+{"type":"heartbeat","data":{"type":"UPDATE","host":"rrc40","peer":"203.0.113.15","peer_asn":64540,"path":[64540,13335],"announcements":[{"prefixes":["1.1.1.0/24"]}]}}
