@@ -161,6 +161,18 @@ std::vector<StoredObservation> RoutingState::stored_observations() const {
     return result;
 }
 
+std::size_t RoutingState::active_prefixes_v4_count() const {
+    return aggregated_v4_.size();
+}
+
+std::size_t RoutingState::active_prefixes_v6_count() const {
+    return aggregated_v6_.size();
+}
+
+std::size_t RoutingState::active_prefixes_total_count() const {
+    return aggregated_v4_.size() + aggregated_v6_.size();
+}
+
 void RoutingState::clear() {
     by_prefix_v4_.clear();
     by_prefix_v6_.clear();

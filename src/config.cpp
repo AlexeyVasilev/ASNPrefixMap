@@ -21,6 +21,17 @@ std::string trim(std::string value) {
     return value;
 }
 
+bool parse_bool(const std::string& value) {
+    if (value == "true") {
+        return true;
+    }
+    if (value == "false") {
+        return false;
+    }
+
+    throw std::runtime_error("Invalid boolean value in config: " + value);
+}
+
 }  // namespace
 
 Config load_config(const std::string& path) {
@@ -31,6 +42,10 @@ Config load_config(const std::string& path) {
     cfg.ris_live_target = "/v1/ws/";
     cfg.max_messages = 0;
     cfg.snapshot_output = "snapshot.txt";
+    cfg.stats_output_enabled = false;
+    cfg.stats_output_file = "stats.csv";
+    cfg.stats_interval_ms = 1000;
+    cfg.stop_on_keypress = false;
 
     std::ifstream file(path);
     if (!file) {
@@ -72,6 +87,14 @@ Config load_config(const std::string& path) {
             cfg.snapshot_input = value;
         } else if (key == "snapshot_output") {
             cfg.snapshot_output = value;
+        } else if (key == "stats_output_enabled") {
+            cfg.stats_output_enabled = parse_bool(value);
+        } else if (key == "stats_output_file") {
+            cfg.stats_output_file = value;
+        } else if (key == "stats_interval_ms") {
+            cfg.stats_interval_ms = static_cast<std::size_t>(std::stoull(value));
+        } else if (key == "stop_on_keypress") {
+            cfg.stop_on_keypress = parse_bool(value);
         }
     }
 

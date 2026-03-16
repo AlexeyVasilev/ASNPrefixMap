@@ -43,6 +43,9 @@ public:
                        const std::string& asn_file) const;
 
     std::vector<StoredObservation> stored_observations() const;
+    std::size_t active_prefixes_v4_count() const;
+    std::size_t active_prefixes_v6_count() const;
+    std::size_t active_prefixes_total_count() const;
     void clear();
     void restore_observation(PeerId peer_id,
                              const PrefixV4& prefix,

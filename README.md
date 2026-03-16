@@ -19,6 +19,7 @@ and derives a stable prefix -> ASN mapping.
 - snapshot save/load of internal routing observations
 - runtime peer registry with numeric PeerId
 - binary runtime prefix storage for IPv4 and IPv6
+- optional periodic growth statistics CSV output
 
 ## Ingestion Flow
 
@@ -29,6 +30,16 @@ source -> raw JSON -> parser -> BgpEvent -> PeerRegistry -> binary prefix parse 
 
 `file_jsonl` is a replay source for raw RIS Live JSON lines.
 `ris_live_ws` is a live WebSocket source using the same parser flow.
+
+## Growth Stats
+
+`stats_output_enabled` enables periodic CSV sampling.
+`stats_output_file` selects the CSV path.
+`stats_interval_ms` sets the sampling interval.
+`stop_on_keypress` enables a local Enter-to-stop helper for interactive runs.
+
+Ever-seen ASN/prefix counts are tracked separately from active counts so temporary withdrawals do not reset growth history.
+Periodic sampling is intended for empirical growth measurement and future saturation estimation, not readiness detection yet.
 
 ## Snapshots
 

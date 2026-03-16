@@ -36,6 +36,7 @@ add_executable(ASNPrefixMap
     src/source/file_jsonl_source.cpp
     src/source/ris_live_websocket_source.cpp
     src/snapshot/snapshot_io.cpp
+    src/stats/growth_stats.cpp
 )
 
 target_include_directories(ASNPrefixMap PRIVATE src)
