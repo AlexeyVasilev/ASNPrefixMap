@@ -30,6 +30,7 @@ Config load_config(const std::string& path) {
     cfg.ris_live_port = "443";
     cfg.ris_live_target = "/v1/ws/";
     cfg.max_messages = 0;
+    cfg.snapshot_output = "snapshot.txt";
 
     std::ifstream file(path);
     if (!file) {
@@ -67,6 +68,10 @@ Config load_config(const std::string& path) {
             cfg.ris_live_target = value;
         } else if (key == "max_messages") {
             cfg.max_messages = static_cast<std::size_t>(std::stoull(value));
+        } else if (key == "snapshot_input") {
+            cfg.snapshot_input = value;
+        } else if (key == "snapshot_output") {
+            cfg.snapshot_output = value;
         }
     }
 

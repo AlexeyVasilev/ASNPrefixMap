@@ -1,12 +1,14 @@
 #include "routing_state.h"
 
+#include <algorithm>
 #include <fstream>
 #include <unordered_map>
 
 void RoutingState::announce(const std::string& peer,
                             const std::string& prefix,
-                            uint32_t asn) {
-    by_prefix_[prefix][peer] = Observation{asn};
+                            uint32_t asn,
+                            std::uint64_t timestamp) {
+    by_prefix_[prefix][peer] = Observation{asn, timestamp};
     recompute_prefix_origin(prefix);
 }
 
@@ -40,7 +42,8 @@ void RoutingState::export_tables(const std::string& prefix_file,
         asn_map[asn].push_back(prefix);
     }
 
-    for (const auto& [asn, prefixes] : asn_map) {
+    for (auto& [asn, prefixes] : asn_map) {
+        std::sort(prefixes.begin(), prefixes.end());
         asn_stream << asn;
 
         for (const auto& prefix : prefixes) {
@@ -48,6 +51,39 @@ void RoutingState::export_tables(const std::string& prefix_file,
         }
 
         asn_stream << '\n';
+    }
+}
+
+std::vector<StoredObservation> RoutingState::stored_observations() const {
+    std::vector<StoredObservation> result;
+
+    for (const auto& [prefix, per_peer] : by_prefix_) {
+        for (const auto& [peer, observation] : per_peer) {
+            result.push_back(StoredObservation{prefix, peer, observation});
+        }
+    }
+
+    return result;
+}
+
+void RoutingState::clear() {
+    by_prefix_.clear();
+    aggregated_.clear();
+}
+
+void RoutingState::restore_observation(const std::string& peer,
+                                       const std::string& prefix,
+                                       uint32_t asn,
+                                       std::uint64_t timestamp) {
+    by_prefix_[prefix][peer] = Observation{asn, timestamp};
+}
+
+void RoutingState::rebuild_aggregated() {
+    aggregated_.clear();
+
+    for (const auto& [prefix, per_peer] : by_prefix_) {
+        static_cast<void>(per_peer);
+        recompute_prefix_origin(prefix);
     }
 }
 

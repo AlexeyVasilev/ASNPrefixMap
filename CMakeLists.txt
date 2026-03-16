@@ -4,7 +4,6 @@ project(ASNPrefixMap VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
 
@@ -34,6 +33,7 @@ add_executable(ASNPrefixMap
     src/parser/ris_live_parser.cpp
     src/source/file_jsonl_source.cpp
     src/source/ris_live_websocket_source.cpp
+    src/snapshot/snapshot_io.cpp
 )
 
 target_include_directories(ASNPrefixMap PRIVATE src)
@@ -41,11 +41,10 @@ target_link_libraries(ASNPrefixMap PRIVATE
     nlohmann_json::nlohmann_json
     OpenSSL::SSL
     OpenSSL::Crypto
+    ws2_32
+    wsock32
+    bcrypt
 )
-
-if(WIN32)
-    target_link_libraries(ASNPrefixMap PRIVATE ws2_32 wsock32 bcrypt)
-endif()
 
 add_executable(ASNPrefixMapRisLiveDemo
     src/ris_live_demo.cpp

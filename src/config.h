@@ -11,6 +11,8 @@ struct Config {
     std::string ris_live_port;
     std::string ris_live_target;
     std::size_t max_messages;
+    std::string snapshot_input;
+    std::string snapshot_output;
 };
 
 Config load_config(const std::string& path);

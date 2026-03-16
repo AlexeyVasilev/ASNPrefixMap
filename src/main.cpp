@@ -1,11 +1,13 @@
 #include "config.h"
 #include "parser/ris_live_parser.h"
 #include "routing_state.h"
+#include "snapshot/snapshot_io.h"
 #include "source/bgp_source.h"
 #include "source/file_jsonl_source.h"
 #include "source/ris_live_websocket_source.h"
 
 #include <cstddef>
+#include <filesystem>
 #include <memory>
 #include <iostream>
 #include <stdexcept>
@@ -42,7 +44,7 @@ void apply_events(const std::vector<BgpEvent>& events,
                   IngestionStats& stats) {
     for (const auto& event : events) {
         if (event.type == EventType::Announce) {
-            state.announce(event.peer, event.prefix, event.asn);
+            state.announce(event.peer, event.prefix, event.asn, event.timestamp);
             ++stats.announces_applied;
         } else if (event.type == EventType::Withdraw) {
             state.withdraw(event.peer, event.prefix);
@@ -66,6 +68,14 @@ int main() {
         const Config cfg = load_config("config.ini");
         RoutingState state;
         IngestionStats stats;
+
+        if (!cfg.snapshot_input.empty() && std::filesystem::exists(cfg.snapshot_input)) {
+            const SnapshotStats snapshot_stats = SnapshotIO::load_snapshot(cfg.snapshot_input, state);
+            std::cerr << "[snapshot] loaded " << cfg.snapshot_input << '\n';
+            std::cerr << "[snapshot] read peers=" << snapshot_stats.peers
+                      << " observations=" << snapshot_stats.observations << '\n';
+        }
+
         std::unique_ptr<BgpSource> source = create_source(cfg);
 
         // Data flow stays intentionally simple:
@@ -89,6 +99,10 @@ int main() {
         }
 
         print_stats(stats);
+        const SnapshotStats snapshot_stats = SnapshotIO::save_snapshot(cfg.snapshot_output, state);
+        std::cerr << "[snapshot] saved " << cfg.snapshot_output << '\n';
+        std::cerr << "[snapshot] wrote peers=" << snapshot_stats.peers
+                  << " observations=" << snapshot_stats.observations << '\n';
         state.export_tables(cfg.prefix_output, cfg.asn_output);
         std::cout << "Done\n";
         return 0;
