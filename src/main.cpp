@@ -2,6 +2,7 @@
 #include "config.h"
 #include "parser/ris_live_parser.h"
 #include "peer/peer_registry.h"
+#include "prefix/prefix.h"
 #include "routing_state.h"
 #include "snapshot/snapshot_io.h"
 #include "source/bgp_source.h"
@@ -47,14 +48,19 @@ void apply_events(const std::vector<BgpEvent>& events,
                   IngestionStats& stats) {
     for (const auto& event : events) {
         const PeerId peer_id = registry.get_or_add(event.peer);
+        const BinaryPrefix prefix = parse_prefix(event.prefix);
 
-        if (event.type == EventType::Announce) {
-            state.announce(peer_id, event.prefix, event.asn, event.timestamp);
-            ++stats.announces_applied;
-        } else if (event.type == EventType::Withdraw) {
-            state.withdraw(peer_id, event.prefix);
-            ++stats.withdraws_applied;
-        }
+        std::visit(
+            [&](const auto& binary_prefix) {
+                if (event.type == EventType::Announce) {
+                    state.announce(peer_id, binary_prefix, event.asn, event.timestamp);
+                    ++stats.announces_applied;
+                } else if (event.type == EventType::Withdraw) {
+                    state.withdraw(peer_id, binary_prefix);
+                    ++stats.withdraws_applied;
+                }
+            },
+            prefix);
     }
 }
 
@@ -84,10 +90,10 @@ int main() {
 
         std::unique_ptr<BgpSource> source = create_source(cfg);
 
-        // PeerRegistry gives each peer identity a compact numeric id, so runtime state
-        // does not duplicate the same peer string for every observed prefix.
-        // Data flow stays intentionally simple:
-        // source -> raw JSON -> parser -> BgpEvent -> PeerRegistry -> RoutingState
+        // PeerRegistry keeps peer identity compact via PeerId.
+        // Prefix text is converted to binary runtime keys before it enters RoutingState.
+        // Snapshot and export stay text-based for manual inspection and interchange.
+        // Data flow: source -> raw JSON -> parser -> BgpEvent -> PeerRegistry/prefix parse -> RoutingState
         std::string message;
         while (source->next_message(message)) {
             ++stats.raw_messages_received;

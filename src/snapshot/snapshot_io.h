@@ -1,13 +1,15 @@
 #pragma once
 
 #include "peer/peer_registry.h"
+#include "prefix/prefix.h"
 
 #include <cstdint>
 #include <cstddef>
 #include <string>
 
 struct SnapshotObservation {
-    std::string prefix;
+    PrefixFamily family;
+    std::string prefix_text;
     PeerId peer_id;
     uint32_t origin_asn;
     std::uint64_t timestamp;

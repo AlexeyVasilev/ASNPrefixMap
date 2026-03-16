@@ -1,6 +1,7 @@
 #include "snapshot_io.h"
 
 #include "peer/peer_registry.h"
+#include "prefix/prefix.h"
 #include "routing_state.h"
 
 #include <algorithm>
@@ -78,7 +79,8 @@ SnapshotStats save_snapshot(const std::string& path,
     observations.reserve(stored.size());
     for (const auto& entry : stored) {
         observations.push_back(SnapshotObservation{
-            entry.prefix,
+            family_of(entry.prefix),
+            to_string(entry.prefix),
             entry.observation.peer_id,
             entry.observation.origin_asn,
             entry.observation.timestamp,
@@ -86,8 +88,11 @@ SnapshotStats save_snapshot(const std::string& path,
     }
 
     std::sort(observations.begin(), observations.end(), [](const auto& left, const auto& right) {
-        if (left.prefix != right.prefix) {
-            return left.prefix < right.prefix;
+        if (left.family != right.family) {
+            return left.family < right.family;
+        }
+        if (left.prefix_text != right.prefix_text) {
+            return left.prefix_text < right.prefix_text;
         }
         if (left.peer_id != right.peer_id) {
             return left.peer_id < right.peer_id;
@@ -105,9 +110,6 @@ SnapshotStats save_snapshot(const std::string& path,
 
     output << "# ASNPrefixMap snapshot v1\n\n";
     output << "[peers]\n";
-
-    // Runtime state now uses PeerId, so snapshot can reuse the runtime registry directly
-    // instead of rebuilding peer identities from duplicated peer strings.
     for (const auto& [peer_id, peer] : peers) {
         output << peer_id << '\t'
                << peer.host << '\t'
@@ -115,9 +117,12 @@ SnapshotStats save_snapshot(const std::string& path,
                << peer.peer_asn << '\n';
     }
 
+    // Snapshot and export remain text-based because they are meant to stay easy to inspect,
+    // even though runtime now keeps normalized binary prefix keys.
     output << "\n[observations]\n";
     for (const auto& observation : observations) {
-        output << observation.prefix << '\t'
+        output << family_to_string(observation.family) << '\t'
+               << observation.prefix_text << '\t'
                << observation.peer_id << '\t'
                << observation.origin_asn << '\t'
                << observation.timestamp << '\n';
@@ -135,7 +140,7 @@ SnapshotStats load_snapshot(const std::string& path,
     }
 
     std::unordered_map<PeerId, PeerInfo> peers;
-    std::vector<std::pair<std::string, SnapshotObservation>> observations;
+    std::vector<SnapshotObservation> observations;
     Section section = Section::None;
     bool saw_any_content = false;
     bool saw_header = false;
@@ -187,16 +192,17 @@ SnapshotStats load_snapshot(const std::string& path,
 
             peers.emplace(peer_id, PeerInfo{fields[1], fields[2], static_cast<uint32_t>(std::stoul(fields[3]))});
         } else if (section == Section::Observations) {
-            if (fields.size() != 4) {
-                throw_parse_error(line_number, "observation line must have 4 tab-separated fields");
+            if (fields.size() != 5) {
+                throw_parse_error(line_number, "observation line must have 5 tab-separated fields");
             }
 
             SnapshotObservation observation;
-            observation.prefix = fields[0];
-            observation.peer_id = static_cast<PeerId>(std::stoul(fields[1]));
-            observation.origin_asn = static_cast<uint32_t>(std::stoul(fields[2]));
-            observation.timestamp = std::stoull(fields[3]);
-            observations.push_back({observation.prefix, observation});
+            observation.family = parse_family(fields[0]);
+            observation.prefix_text = fields[1];
+            observation.peer_id = static_cast<PeerId>(std::stoul(fields[2]));
+            observation.origin_asn = static_cast<uint32_t>(std::stoul(fields[3]));
+            observation.timestamp = std::stoull(fields[4]);
+            observations.push_back(observation);
         }
     }
 
@@ -211,16 +217,19 @@ SnapshotStats load_snapshot(const std::string& path,
     }
 
     std::sort(observations.begin(), observations.end(), [](const auto& left, const auto& right) {
-        if (left.first != right.first) {
-            return left.first < right.first;
+        if (left.family != right.family) {
+            return left.family < right.family;
         }
-        if (left.second.peer_id != right.second.peer_id) {
-            return left.second.peer_id < right.second.peer_id;
+        if (left.prefix_text != right.prefix_text) {
+            return left.prefix_text < right.prefix_text;
         }
-        if (left.second.origin_asn != right.second.origin_asn) {
-            return left.second.origin_asn < right.second.origin_asn;
+        if (left.peer_id != right.peer_id) {
+            return left.peer_id < right.peer_id;
         }
-        return left.second.timestamp < right.second.timestamp;
+        if (left.origin_asn != right.origin_asn) {
+            return left.origin_asn < right.origin_asn;
+        }
+        return left.timestamp < right.timestamp;
     });
 
     registry.clear();
@@ -230,22 +239,27 @@ SnapshotStats load_snapshot(const std::string& path,
         registry.insert_with_id(peer_id, peer);
     }
 
-    for (const auto& [prefix, observation] : observations) {
-        static_cast<void>(prefix);
+    for (const auto& observation : observations) {
         if (!registry.contains(observation.peer_id)) {
             throw std::runtime_error("Snapshot parse error: observation references unknown peer_id " +
                                      std::to_string(observation.peer_id));
         }
 
-        state.restore_observation(
-            observation.peer_id,
-            observation.prefix,
-            observation.origin_asn,
-            observation.timestamp);
+        if (observation.family == PrefixFamily::V4) {
+            state.restore_observation(
+                observation.peer_id,
+                parse_prefix_v4(observation.prefix_text),
+                observation.origin_asn,
+                observation.timestamp);
+        } else {
+            state.restore_observation(
+                observation.peer_id,
+                parse_prefix_v6(observation.prefix_text),
+                observation.origin_asn,
+                observation.timestamp);
+        }
     }
 
-    // Derived exports are recomputed from restored observations because the snapshot
-    // should not serialize and trust redundant aggregated tables.
     state.rebuild_aggregated();
     return SnapshotStats{peers.size(), observations.size()};
 }

@@ -1,11 +1,13 @@
 #pragma once
 
 #include "peer/peer_registry.h"
+#include "prefix/prefix.h"
 
 #include <cstdint>
 #include <string>
 
-// Normalized event types used by parsers and future data sources.
+// Normalized events still keep prefix text at the parser boundary.
+// Runtime converts it to binary prefix types before inserting into RoutingState.
 enum class EventType {
     Announce,
     Withdraw

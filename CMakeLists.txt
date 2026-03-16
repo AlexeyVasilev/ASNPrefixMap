@@ -30,6 +30,7 @@ add_executable(ASNPrefixMap
     src/main.cpp
     src/config.cpp
     src/peer/peer_registry.cpp
+    src/prefix/prefix.cpp
     src/routing_state.cpp
     src/parser/ris_live_parser.cpp
     src/source/file_jsonl_source.cpp
