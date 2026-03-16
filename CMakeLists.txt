@@ -29,6 +29,7 @@ endif()
 add_executable(ASNPrefixMap
     src/main.cpp
     src/config.cpp
+    src/peer/peer_registry.cpp
     src/routing_state.cpp
     src/parser/ris_live_parser.cpp
     src/source/file_jsonl_source.cpp
@@ -48,6 +49,7 @@ target_link_libraries(ASNPrefixMap PRIVATE
 
 add_executable(ASNPrefixMapRisLiveDemo
     src/ris_live_demo.cpp
+    src/peer/peer_registry.cpp
     src/parser/ris_live_parser.cpp
 )
 

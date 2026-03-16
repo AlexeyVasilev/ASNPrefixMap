@@ -4,24 +4,42 @@
 #include <fstream>
 #include <unordered_map>
 
-void RoutingState::announce(const std::string& peer,
+void RoutingState::announce(PeerId peer_id,
                             const std::string& prefix,
-                            uint32_t asn,
+                            uint32_t origin_asn,
                             std::uint64_t timestamp) {
-    by_prefix_[prefix][peer] = Observation{asn, timestamp};
+    PrefixRecord& record = by_prefix_[prefix];
+
+    for (auto& observation : record.observations) {
+        if (observation.peer_id == peer_id) {
+            observation.origin_asn = origin_asn;
+            observation.timestamp = timestamp;
+            recompute_prefix_origin(prefix);
+            return;
+        }
+    }
+
+    record.observations.push_back(Observation{peer_id, origin_asn, timestamp});
     recompute_prefix_origin(prefix);
 }
 
-void RoutingState::withdraw(const std::string& peer,
+void RoutingState::withdraw(PeerId peer_id,
                             const std::string& prefix) {
     const auto it = by_prefix_.find(prefix);
     if (it == by_prefix_.end()) {
         return;
     }
 
-    it->second.erase(peer);
+    PrefixRecord& record = it->second;
+    record.observations.erase(
+        std::remove_if(record.observations.begin(),
+                       record.observations.end(),
+                       [peer_id](const Observation& observation) {
+                           return observation.peer_id == peer_id;
+                       }),
+        record.observations.end());
 
-    if (it->second.empty()) {
+    if (record.observations.empty()) {
         by_prefix_.erase(it);
         aggregated_.erase(prefix);
         return;
@@ -57,9 +75,9 @@ void RoutingState::export_tables(const std::string& prefix_file,
 std::vector<StoredObservation> RoutingState::stored_observations() const {
     std::vector<StoredObservation> result;
 
-    for (const auto& [prefix, per_peer] : by_prefix_) {
-        for (const auto& [peer, observation] : per_peer) {
-            result.push_back(StoredObservation{prefix, peer, observation});
+    for (const auto& [prefix, record] : by_prefix_) {
+        for (const auto& observation : record.observations) {
+            result.push_back(StoredObservation{prefix, observation});
         }
     }
 
@@ -71,18 +89,18 @@ void RoutingState::clear() {
     aggregated_.clear();
 }
 
-void RoutingState::restore_observation(const std::string& peer,
+void RoutingState::restore_observation(PeerId peer_id,
                                        const std::string& prefix,
-                                       uint32_t asn,
+                                       uint32_t origin_asn,
                                        std::uint64_t timestamp) {
-    by_prefix_[prefix][peer] = Observation{asn, timestamp};
+    by_prefix_[prefix].observations.push_back(Observation{peer_id, origin_asn, timestamp});
 }
 
 void RoutingState::rebuild_aggregated() {
     aggregated_.clear();
 
-    for (const auto& [prefix, per_peer] : by_prefix_) {
-        static_cast<void>(per_peer);
+    for (const auto& [prefix, record] : by_prefix_) {
+        static_cast<void>(record);
         recompute_prefix_origin(prefix);
     }
 }
@@ -90,16 +108,15 @@ void RoutingState::rebuild_aggregated() {
 void RoutingState::recompute_prefix_origin(const std::string& prefix) {
     std::unordered_map<uint32_t, int> counts;
 
-    for (const auto& [peer, observation] : by_prefix_[prefix]) {
-        static_cast<void>(peer);
-        counts[observation.asn]++;
+    for (const auto& observation : by_prefix_[prefix].observations) {
+        counts[observation.origin_asn]++;
     }
 
     uint32_t best_asn = 0;
-    int best_count = 0;
+    int best_count = -1;
 
     for (const auto& [asn, count] : counts) {
-        if (count > best_count) {
+        if (count > best_count || (count == best_count && asn < best_asn)) {
             best_count = count;
             best_asn = asn;
         }

@@ -37,12 +37,12 @@ std::uint64_t get_timestamp_or_zero(const json& object) {
     return it->get<std::uint64_t>();
 }
 
-std::string build_peer_id(const json& data) {
-    const std::string host = get_string_or_empty(data, "host");
-    const std::string peer = get_string_or_empty(data, "peer");
-    const uint32_t peer_asn = get_uint32_or_zero(data, "peer_asn");
-
-    return host + "|" + peer + "|" + std::to_string(peer_asn);
+PeerInfo build_peer_info(const json& data) {
+    return PeerInfo{
+        get_string_or_empty(data, "host"),
+        get_string_or_empty(data, "peer"),
+        get_uint32_or_zero(data, "peer_asn"),
+    };
 }
 
 bool try_get_origin_asn(const json& data, uint32_t& origin_asn) {
@@ -64,7 +64,7 @@ bool try_get_origin_asn(const json& data, uint32_t& origin_asn) {
 }
 
 void append_announce_events(const json& data,
-                            const std::string& peer,
+                            const PeerInfo& peer,
                             std::uint64_t timestamp,
                             std::vector<BgpEvent>& events) {
     uint32_t origin_asn = 0;
@@ -100,7 +100,7 @@ void append_announce_events(const json& data,
 }
 
 void append_withdraw_events(const json& data,
-                            const std::string& peer,
+                            const PeerInfo& peer,
                             std::uint64_t timestamp,
                             std::vector<BgpEvent>& events) {
     const auto withdrawals_it = data.find("withdrawals");
@@ -150,7 +150,7 @@ std::vector<BgpEvent> parse_ris_live_message(const std::string& text) {
         return events;
     }
 
-    const std::string peer = build_peer_id(data);
+    const PeerInfo peer = build_peer_info(data);
     const std::uint64_t timestamp = get_timestamp_or_zero(data);
 
     append_announce_events(data, peer, timestamp, events);

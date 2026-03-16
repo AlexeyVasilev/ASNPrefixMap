@@ -17,13 +17,14 @@ and derives a stable prefix -> ASN mapping.
 - offline replay of raw RIS Live JSON messages
 - live RIPE RIS Live WebSocket ingestion
 - snapshot save/load of internal routing observations
+- runtime peer registry with numeric PeerId
 
 ## Ingestion Flow
 
 The source layer always returns raw RIS Live JSON messages.
 The main pipeline is:
 
-source -> raw JSON -> parser -> BgpEvent -> RoutingState
+source -> raw JSON -> parser -> BgpEvent -> PeerRegistry -> RoutingState
 
 `file_jsonl` is a replay source for raw RIS Live JSON lines.
 `ris_live_ws` is a live WebSocket source using the same parser flow.
@@ -35,6 +36,12 @@ source -> raw JSON -> parser -> BgpEvent -> RoutingState
 
 Snapshots preserve the internal observations required for correct withdraw handling after restart.
 They do not store only the final prefix -> ASN export, because the export alone loses per-peer state.
+
+## Runtime State
+
+Runtime state now stores peer references as numeric `PeerId` values via `PeerRegistry`.
+This removes repeated peer-string copies from per-prefix observations while keeping prefix as `std::string`
+for now so the refactor stays incremental.
 
 ## Example
 

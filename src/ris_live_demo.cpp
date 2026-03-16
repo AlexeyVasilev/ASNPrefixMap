@@ -1,5 +1,6 @@
 #include "bgp_event.h"
 #include "parser/ris_live_parser.h"
+#include "peer/peer_registry.h"
 
 #include <fstream>
 #include <iostream>
@@ -34,7 +35,7 @@ int main(int argc, char* argv[]) {
 
         for (const auto& event : events) {
             std::cout << event_type_to_string(event.type)
-                      << "\tpeer=" << event.peer
+                      << "\tpeer=" << PeerRegistry::make_key(event.peer)
                       << "\tprefix=" << event.prefix
                       << "\tasn=" << event.asn
                       << "\ttimestamp=" << event.timestamp

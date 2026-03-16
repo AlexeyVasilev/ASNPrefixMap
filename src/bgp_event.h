@@ -1,5 +1,7 @@
 #pragma once
 
+#include "peer/peer_registry.h"
+
 #include <cstdint>
 #include <string>
 
@@ -11,7 +13,7 @@ enum class EventType {
 
 struct BgpEvent {
     EventType type;
-    std::string peer;
+    PeerInfo peer;
     std::string prefix;
     uint32_t asn;
     std::uint64_t timestamp;

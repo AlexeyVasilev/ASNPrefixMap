@@ -1,12 +1,12 @@
 #include "snapshot_io.h"
 
+#include "peer/peer_registry.h"
 #include "routing_state.h"
 
 #include <algorithm>
 #include <cstddef>
 #include <fstream>
-#include <map>
-#include <sstream>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -47,25 +47,6 @@ std::string trim(const std::string& value) {
     return value.substr(first, last - first + 1);
 }
 
-PeerInfo parse_peer_string(const std::string& peer) {
-    const std::size_t first_sep = peer.find('|');
-    const std::size_t second_sep = peer.find('|', first_sep == std::string::npos ? first_sep : first_sep + 1);
-
-    if (first_sep == std::string::npos || second_sep == std::string::npos) {
-        throw std::runtime_error("Malformed peer string in routing state: " + peer);
-    }
-
-    PeerInfo info;
-    info.host = peer.substr(0, first_sep);
-    info.peer_ip = peer.substr(first_sep + 1, second_sep - first_sep - 1);
-    info.peer_asn = static_cast<uint32_t>(std::stoul(peer.substr(second_sep + 1)));
-    return info;
-}
-
-std::string build_peer_string(const PeerInfo& peer) {
-    return peer.host + "|" + peer.peer_ip + "|" + std::to_string(peer.peer_asn);
-}
-
 [[noreturn]] void throw_parse_error(std::size_t line_number, const std::string& message) {
     throw std::runtime_error("Snapshot parse error at line " + std::to_string(line_number) + ": " + message);
 }
@@ -74,39 +55,23 @@ std::string build_peer_string(const PeerInfo& peer) {
 
 namespace SnapshotIO {
 
-SnapshotStats save_snapshot(const std::string& path, const RoutingState& state) {
+SnapshotStats save_snapshot(const std::string& path,
+                            const PeerRegistry& registry,
+                            const RoutingState& state) {
     const std::vector<StoredObservation> stored = state.stored_observations();
 
-    std::map<std::string, uint32_t> peer_ids;
-    std::vector<std::pair<uint32_t, PeerInfo>> peers;
-    uint32_t next_peer_id = 1;
-
-    // Snapshot stores internal observations, not only exports, because withdraw correctness
-    // after restart depends on the full per-peer state rather than the derived prefix->ASN table.
+    std::set<PeerId> used_peer_ids;
     for (const auto& entry : stored) {
-        if (peer_ids.find(entry.peer) != peer_ids.end()) {
-            continue;
-        }
-
-        const uint32_t peer_id = next_peer_id++;
-        peer_ids.emplace(entry.peer, peer_id);
-        peers.push_back({peer_id, parse_peer_string(entry.peer)});
+        used_peer_ids.insert(entry.observation.peer_id);
     }
 
-    std::sort(peers.begin(), peers.end(), [](const auto& left, const auto& right) {
-        if (left.second.host != right.second.host) {
-            return left.second.host < right.second.host;
+    std::vector<std::pair<PeerId, PeerInfo>> peers;
+    peers.reserve(used_peer_ids.size());
+    for (PeerId peer_id : used_peer_ids) {
+        if (!registry.contains(peer_id)) {
+            throw std::runtime_error("Routing state references unknown peer_id " + std::to_string(peer_id));
         }
-        if (left.second.peer_ip != right.second.peer_ip) {
-            return left.second.peer_ip < right.second.peer_ip;
-        }
-        return left.second.peer_asn < right.second.peer_asn;
-    });
-
-    peer_ids.clear();
-    for (std::size_t index = 0; index < peers.size(); ++index) {
-        peers[index].first = static_cast<uint32_t>(index + 1);
-        peer_ids[build_peer_string(peers[index].second)] = peers[index].first;
+        peers.push_back({peer_id, registry.get(peer_id)});
     }
 
     std::vector<SnapshotObservation> observations;
@@ -114,8 +79,8 @@ SnapshotStats save_snapshot(const std::string& path, const RoutingState& state) 
     for (const auto& entry : stored) {
         observations.push_back(SnapshotObservation{
             entry.prefix,
-            peer_ids.at(entry.peer),
-            entry.observation.asn,
+            entry.observation.peer_id,
+            entry.observation.origin_asn,
             entry.observation.timestamp,
         });
     }
@@ -141,8 +106,8 @@ SnapshotStats save_snapshot(const std::string& path, const RoutingState& state) 
     output << "# ASNPrefixMap snapshot v1\n\n";
     output << "[peers]\n";
 
-    // Peer registry is introduced in the snapshot early to reduce duplication on disk
-    // and to prepare for a later runtime refactor to numeric PeerId storage.
+    // Runtime state now uses PeerId, so snapshot can reuse the runtime registry directly
+    // instead of rebuilding peer identities from duplicated peer strings.
     for (const auto& [peer_id, peer] : peers) {
         output << peer_id << '\t'
                << peer.host << '\t'
@@ -161,13 +126,15 @@ SnapshotStats save_snapshot(const std::string& path, const RoutingState& state) 
     return SnapshotStats{peers.size(), observations.size()};
 }
 
-SnapshotStats load_snapshot(const std::string& path, RoutingState& state) {
+SnapshotStats load_snapshot(const std::string& path,
+                            PeerRegistry& registry,
+                            RoutingState& state) {
     std::ifstream input(path);
     if (!input) {
         throw std::runtime_error("Failed to open snapshot input: " + path);
     }
 
-    std::unordered_map<uint32_t, PeerInfo> peers;
+    std::unordered_map<PeerId, PeerInfo> peers;
     std::vector<std::pair<std::string, SnapshotObservation>> observations;
     Section section = Section::None;
     bool saw_any_content = false;
@@ -213,7 +180,7 @@ SnapshotStats load_snapshot(const std::string& path, RoutingState& state) {
                 throw_parse_error(line_number, "peer line must have 4 tab-separated fields");
             }
 
-            const uint32_t peer_id = static_cast<uint32_t>(std::stoul(fields[0]));
+            const PeerId peer_id = static_cast<PeerId>(std::stoul(fields[0]));
             if (peers.find(peer_id) != peers.end()) {
                 throw_parse_error(line_number, "duplicate peer_id: " + fields[0]);
             }
@@ -226,15 +193,15 @@ SnapshotStats load_snapshot(const std::string& path, RoutingState& state) {
 
             SnapshotObservation observation;
             observation.prefix = fields[0];
-            observation.peer_id = static_cast<uint32_t>(std::stoul(fields[1]));
+            observation.peer_id = static_cast<PeerId>(std::stoul(fields[1]));
             observation.origin_asn = static_cast<uint32_t>(std::stoul(fields[2]));
             observation.timestamp = std::stoull(fields[3]);
             observations.push_back({observation.prefix, observation});
         }
     }
 
-    // Empty snapshot file is tolerated and treated as empty state.
     if (!saw_any_content) {
+        registry.clear();
         state.clear();
         return SnapshotStats{};
     }
@@ -256,17 +223,22 @@ SnapshotStats load_snapshot(const std::string& path, RoutingState& state) {
         return left.second.timestamp < right.second.timestamp;
     });
 
+    registry.clear();
     state.clear();
+
+    for (const auto& [peer_id, peer] : peers) {
+        registry.insert_with_id(peer_id, peer);
+    }
+
     for (const auto& [prefix, observation] : observations) {
         static_cast<void>(prefix);
-        const auto peer_it = peers.find(observation.peer_id);
-        if (peer_it == peers.end()) {
+        if (!registry.contains(observation.peer_id)) {
             throw std::runtime_error("Snapshot parse error: observation references unknown peer_id " +
                                      std::to_string(observation.peer_id));
         }
 
         state.restore_observation(
-            build_peer_string(peer_it->second),
+            observation.peer_id,
             observation.prefix,
             observation.origin_asn,
             observation.timestamp);
