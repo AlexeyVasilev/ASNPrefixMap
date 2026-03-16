@@ -10,6 +10,7 @@ struct Config {
     std::string ris_live_host;
     std::string ris_live_port;
     std::string ris_live_target;
+    std::size_t max_messages;
 };
 
 Config load_config(const std::string& path);

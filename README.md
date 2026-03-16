@@ -14,13 +14,24 @@ and derives a stable prefix -> ASN mapping.
 - export of prefix -> ASN tables
 - export of ASN -> prefix reverse index
 - configuration via config.ini
-- offline testing using JSONL event streams
+- offline replay of raw RIS Live JSON messages
+- live RIPE RIS Live WebSocket ingestion
+
+## Ingestion Flow
+
+The source layer always returns raw RIS Live JSON messages.
+The main pipeline is:
+
+source -> raw JSON -> parser -> BgpEvent -> RoutingState
+
+`file_jsonl` is a replay source for raw RIS Live JSON lines.
+`ris_live_ws` is a live WebSocket source using the same parser flow.
 
 ## Example
 
 Input events:
 
-{"type":"announce","peer":"rrc00|192.0.2.1|64500","prefix":"8.8.8.0/24","asn":15169}
+{"type":"ris_message","data":{"type":"UPDATE","host":"rrc00","peer":"192.0.2.1","peer_asn":64500,"timestamp":1710000000,"path":[64500,64496,15169],"announcements":[{"prefixes":["8.8.8.0/24"]}]}}
 
 Output:
 8.8.8.0/24 15169
@@ -34,7 +45,6 @@ make
 
 ## Roadmap
 
-- WebSocket BGP source (RIS Live)
 - MRT file replay
 - IPv6 support
 - ASN metadata enrichment

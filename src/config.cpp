@@ -29,6 +29,7 @@ Config load_config(const std::string& path) {
     cfg.ris_live_host = "ris-live.ripe.net";
     cfg.ris_live_port = "443";
     cfg.ris_live_target = "/v1/ws/";
+    cfg.max_messages = 0;
 
     std::ifstream file(path);
     if (!file) {
@@ -64,6 +65,8 @@ Config load_config(const std::string& path) {
             cfg.ris_live_port = value;
         } else if (key == "ris_live_target") {
             cfg.ris_live_target = value;
+        } else if (key == "max_messages") {
+            cfg.max_messages = static_cast<std::size_t>(std::stoull(value));
         }
     }
 

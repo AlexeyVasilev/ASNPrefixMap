@@ -29,7 +29,7 @@ RisLiveWebSocketSource::RisLiveWebSocketSource(const std::string& host,
     // trust store loading is not implemented yet.
     // Acceptable for public RIS Live data ingestion, but not for security-sensitive use.
     ssl_context_.set_verify_mode(ssl::verify_none);
-    
+
     connect();
     send_subscribe();
 }
@@ -56,7 +56,6 @@ bool RisLiveWebSocketSource::next_message(std::string& json) {
         buffer_.consume(buffer_.size());
         websocket_->read(buffer_);
         json = beast::buffers_to_string(buffer_.data());
-        std::cerr << "[ris_live_ws] message received\n";
         return true;
     } catch (const std::exception& ex) {
         std::cerr << "[ris_live_ws] read error: " << ex.what() << '\n';
