@@ -12,6 +12,12 @@ struct PeerInfo {
     std::string host;
     std::string peer_ip;
     uint32_t peer_asn = 0;
+
+    bool operator==(const PeerInfo& other) const = default;
+};
+
+struct PeerInfoHash {
+    std::size_t operator()(const PeerInfo& peer) const noexcept;
 };
 
 class PeerRegistry {
@@ -27,7 +33,9 @@ public:
     static PeerInfo parse_key(const std::string& key);
 
 private:
-    std::unordered_map<std::string, PeerId> by_key_;
+    // Structured peer keys avoid building temporary composite strings on the hot ingest path.
+    // This gives the obvious allocation win now without introducing a string pool yet.
+    std::unordered_map<PeerInfo, PeerId, PeerInfoHash> by_info_;
     std::unordered_map<PeerId, PeerInfo> by_id_;
     PeerId next_peer_id_ = 1;
 };

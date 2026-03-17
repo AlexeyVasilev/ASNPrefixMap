@@ -3,30 +3,35 @@
 #include <algorithm>
 #include <stdexcept>
 
+std::size_t PeerInfoHash::operator()(const PeerInfo& peer) const noexcept {
+    const std::size_t host_hash = std::hash<std::string>{}(peer.host);
+    const std::size_t ip_hash = std::hash<std::string>{}(peer.peer_ip);
+    const std::size_t asn_hash = std::hash<uint32_t>{}(peer.peer_asn);
+    return host_hash ^ (ip_hash << 1) ^ (asn_hash << 2);
+}
+
 PeerId PeerRegistry::get_or_add(const PeerInfo& peer) {
-    const std::string key = make_key(peer);
-    const auto it = by_key_.find(key);
-    if (it != by_key_.end()) {
+    const auto it = by_info_.find(peer);
+    if (it != by_info_.end()) {
         return it->second;
     }
 
     const PeerId peer_id = next_peer_id_++;
-    by_key_[key] = peer_id;
+    by_info_[peer] = peer_id;
     by_id_[peer_id] = peer;
     return peer_id;
 }
 
 void PeerRegistry::insert_with_id(PeerId peer_id, const PeerInfo& peer) {
-    const std::string key = make_key(peer);
     if (by_id_.find(peer_id) != by_id_.end()) {
         throw std::runtime_error("Duplicate peer_id in registry: " + std::to_string(peer_id));
     }
-    if (by_key_.find(key) != by_key_.end()) {
-        throw std::runtime_error("Duplicate peer identity in registry: " + key);
+    if (by_info_.find(peer) != by_info_.end()) {
+        throw std::runtime_error("Duplicate peer identity in registry: " + make_key(peer));
     }
 
     by_id_[peer_id] = peer;
-    by_key_[key] = peer_id;
+    by_info_[peer] = peer_id;
     if (peer_id >= next_peer_id_) {
         next_peer_id_ = peer_id + 1;
     }
@@ -46,7 +51,7 @@ const PeerInfo& PeerRegistry::get(PeerId peer_id) const {
 }
 
 void PeerRegistry::clear() {
-    by_key_.clear();
+    by_info_.clear();
     by_id_.clear();
     next_peer_id_ = 1;
 }

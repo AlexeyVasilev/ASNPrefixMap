@@ -24,13 +24,22 @@ void GrowthStatsTracker::seed_from_state(const RoutingState& state) {
 
     for (const auto& stored : state.stored_observations()) {
         ever_seen_asns_.insert(stored.observation.origin_asn);
-        ever_seen_prefixes_.insert(to_string(stored.prefix));
+        std::visit(
+            [&](const auto& prefix) {
+                using PrefixType = std::decay_t<decltype(prefix)>;
+                if constexpr (std::is_same_v<PrefixType, PrefixV4>) {
+                    ever_seen_prefixes_v4_.insert(prefix);
+                } else {
+                    ever_seen_prefixes_v6_.insert(prefix);
+                }
+            },
+            stored.prefix);
     }
 
     active_prefixes_v4_ = state.active_prefixes_v4_count();
     active_prefixes_v6_ = state.active_prefixes_v6_count();
     last_sample_asn_count_ = ever_seen_asns_.size();
-    last_sample_prefix_count_ = ever_seen_prefixes_.size();
+    last_sample_prefix_count_ = ever_seen_prefixes_v4_.size() + ever_seen_prefixes_v6_.size();
 }
 
 void GrowthStatsTracker::on_message_received() {
@@ -43,16 +52,29 @@ void GrowthStatsTracker::on_parsed_events(std::size_t parsed_events) {
     parsed_events_total_ += parsed_events;
 }
 
-void GrowthStatsTracker::on_announce(uint32_t asn, const std::string& prefix_text) {
+void GrowthStatsTracker::on_announce(uint32_t asn, const PrefixV4& prefix) {
     std::lock_guard<std::mutex> lock(mutex_);
     ever_seen_asns_.insert(asn);
-    ever_seen_prefixes_.insert(prefix_text);
+    ever_seen_prefixes_v4_.insert(prefix);
     ++announces_applied_;
 }
 
-void GrowthStatsTracker::on_withdraw(const std::string& prefix_text) {
+void GrowthStatsTracker::on_announce(uint32_t asn, const PrefixV6& prefix) {
     std::lock_guard<std::mutex> lock(mutex_);
-    ever_seen_prefixes_.insert(prefix_text);
+    ever_seen_asns_.insert(asn);
+    ever_seen_prefixes_v6_.insert(prefix);
+    ++announces_applied_;
+}
+
+void GrowthStatsTracker::on_withdraw(const PrefixV4& prefix) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    ever_seen_prefixes_v4_.insert(prefix);
+    ++withdraws_applied_;
+}
+
+void GrowthStatsTracker::on_withdraw(const PrefixV6& prefix) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    ever_seen_prefixes_v6_.insert(prefix);
     ++withdraws_applied_;
 }
 
@@ -69,7 +91,7 @@ GrowthSample GrowthStatsTracker::sample_now() {
     const double uptime_sec = std::chrono::duration<double>(now - started_at_).count();
     const double interval_sec = std::chrono::duration<double>(now - last_sample_at_).count();
     const std::size_t total_asns = ever_seen_asns_.size();
-    const std::size_t total_prefixes = ever_seen_prefixes_.size();
+    const std::size_t total_prefixes = ever_seen_prefixes_v4_.size() + ever_seen_prefixes_v6_.size();
     const std::size_t new_asns = total_asns - last_sample_asn_count_;
     const std::size_t new_prefixes = total_prefixes - last_sample_prefix_count_;
 
@@ -90,8 +112,6 @@ GrowthSample GrowthStatsTracker::sample_now() {
     sample.announces_applied = announces_applied_;
     sample.withdraws_applied = withdraws_applied_;
 
-    // Ever-seen counts stay separate from active counts because a prefix or ASN may disappear
-    // from active state and later reappear; growth estimation needs lifetime-first-seen tracking.
     last_sample_asn_count_ = total_asns;
     last_sample_prefix_count_ = total_prefixes;
     last_sample_at_ = now;

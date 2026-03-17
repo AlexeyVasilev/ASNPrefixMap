@@ -20,6 +20,7 @@ and derives a stable prefix -> ASN mapping.
 - runtime peer registry with numeric PeerId
 - binary runtime prefix storage for IPv4 and IPv6
 - optional periodic growth statistics CSV output
+- small-vector optimization for per-prefix observations
 
 ## Ingestion Flow
 
@@ -54,6 +55,7 @@ Snapshot and export remain text-based so they stay easy to inspect manually, whi
 
 Runtime state stores peer references as numeric `PeerId` values via `PeerRegistry`.
 It now stores IPv4 and IPv6 prefixes in separate binary maps. Prefixes remain text only at parser, snapshot, and export boundaries.
+Observation storage uses `boost::container::small_vector` with inline capacity 4 because most prefixes are expected to have only a few peer observations.
 
 ## Example
 

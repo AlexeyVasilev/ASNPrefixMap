@@ -14,15 +14,18 @@ void announce_impl(std::unordered_map<Prefix, PrefixRecord, PrefixHash>& by_pref
                    std::uint64_t timestamp) {
     PrefixRecord& record = by_prefix[prefix];
 
-    for (auto& observation : record.observations) {
-        if (observation.peer_id == peer_id) {
-            observation.origin_asn = origin_asn;
-            observation.timestamp = timestamp;
+    for (std::size_t index = 0; index < record.observations.size(); ++index) {
+        if (record.observations[index].peer_id == peer_id) {
+            record.observations[index].origin_asn = origin_asn;
+            record.timestamps[index] = timestamp;
             return;
         }
     }
 
-    record.observations.push_back(Observation{peer_id, origin_asn, timestamp});
+    // Timestamp is not needed for core selection/withdraw runtime logic, so it stays outside
+    // the hot Observation struct and is only carried in a parallel side array for snapshot/debug use.
+    record.observations.push_back(Observation{peer_id, origin_asn});
+    record.timestamps.push_back(timestamp);
 }
 
 template <typename Prefix, typename PrefixHash>
@@ -35,13 +38,13 @@ bool withdraw_impl(std::unordered_map<Prefix, PrefixRecord, PrefixHash>& by_pref
     }
 
     PrefixRecord& record = it->second;
-    record.observations.erase(
-        std::remove_if(record.observations.begin(),
-                       record.observations.end(),
-                       [peer_id](const Observation& observation) {
-                           return observation.peer_id == peer_id;
-                       }),
-        record.observations.end());
+    for (std::size_t index = 0; index < record.observations.size(); ++index) {
+        if (record.observations[index].peer_id == peer_id) {
+            record.observations.erase(record.observations.begin() + static_cast<std::ptrdiff_t>(index));
+            record.timestamps.erase(record.timestamps.begin() + static_cast<std::ptrdiff_t>(index));
+            break;
+        }
+    }
 
     if (record.observations.empty()) {
         by_prefix.erase(it);
@@ -76,8 +79,8 @@ template <typename Prefix, typename PrefixHash>
 void append_stored_observations(const std::unordered_map<Prefix, PrefixRecord, PrefixHash>& by_prefix,
                                 std::vector<StoredObservation>& result) {
     for (const auto& [prefix, record] : by_prefix) {
-        for (const auto& observation : record.observations) {
-            result.push_back(StoredObservation{prefix, observation});
+        for (std::size_t index = 0; index < record.observations.size(); ++index) {
+            result.push_back(StoredObservation{prefix, record.observations[index], record.timestamps[index]});
         }
     }
 }
@@ -184,14 +187,16 @@ void RoutingState::restore_observation(PeerId peer_id,
                                        const PrefixV4& prefix,
                                        uint32_t origin_asn,
                                        std::uint64_t timestamp) {
-    by_prefix_v4_[prefix].observations.push_back(Observation{peer_id, origin_asn, timestamp});
+    by_prefix_v4_[prefix].observations.push_back(Observation{peer_id, origin_asn});
+    by_prefix_v4_[prefix].timestamps.push_back(timestamp);
 }
 
 void RoutingState::restore_observation(PeerId peer_id,
                                        const PrefixV6& prefix,
                                        uint32_t origin_asn,
                                        std::uint64_t timestamp) {
-    by_prefix_v6_[prefix].observations.push_back(Observation{peer_id, origin_asn, timestamp});
+    by_prefix_v6_[prefix].observations.push_back(Observation{peer_id, origin_asn});
+    by_prefix_v6_[prefix].timestamps.push_back(timestamp);
 }
 
 void RoutingState::rebuild_aggregated() {

@@ -83,7 +83,7 @@ SnapshotStats save_snapshot(const std::string& path,
             to_string(entry.prefix),
             entry.observation.peer_id,
             entry.observation.origin_asn,
-            entry.observation.timestamp,
+            entry.timestamp,
         });
     }
 

@@ -56,6 +56,22 @@ std::pair<std::string, uint8_t> split_cidr(const std::string& cidr_text) {
     return {address, static_cast<uint8_t>(length_value)};
 }
 
+PrefixFamily infer_family_from_text(const std::string& cidr_text) {
+    const std::size_t slash = cidr_text.find('/');
+    const std::string_view address = slash == std::string::npos
+        ? std::string_view(cidr_text)
+        : std::string_view(cidr_text.data(), slash);
+
+    if (address.find(':') != std::string_view::npos) {
+        return PrefixFamily::V6;
+    }
+    if (address.find('.') != std::string_view::npos) {
+        return PrefixFamily::V4;
+    }
+
+    throw std::runtime_error("Unable to infer prefix family: " + cidr_text);
+}
+
 }  // namespace
 
 std::size_t PrefixV4Hash::operator()(const PrefixV4& prefix) const noexcept {
@@ -71,12 +87,9 @@ std::size_t PrefixV6Hash::operator()(const PrefixV6& prefix) const noexcept {
 }
 
 BinaryPrefix parse_prefix(const std::string& cidr_text) {
-    try {
-        return parse_prefix_v4(cidr_text);
-    } catch (const std::exception&) {
-    }
-
-    return parse_prefix_v6(cidr_text);
+    return infer_family_from_text(cidr_text) == PrefixFamily::V4
+        ? BinaryPrefix(parse_prefix_v4(cidr_text))
+        : BinaryPrefix(parse_prefix_v6(cidr_text));
 }
 
 PrefixV4 parse_prefix_v4(const std::string& cidr_text) {

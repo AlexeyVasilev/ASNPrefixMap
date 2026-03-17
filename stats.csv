@@ -1,2 +1,3 @@
 timestamp_ms,uptime_sec,total_unique_asns_ever_seen,total_unique_prefixes_ever_seen,total_active_prefixes_v4,total_active_prefixes_v6,total_active_prefixes,new_asns_in_interval,new_prefixes_in_interval,new_asns_per_sec,new_prefixes_per_sec,raw_messages_received,parsed_events_total,announces_applied,withdraws_applied
-1773656786943,0.025,1,5,2,0,2,1,5,39.370234,196.851169,5,5,2,3
+1773734167603,0.009,0,0,0,0,0,0,0,0.000000,0.000000,0,0,0,0
+1773734167619,0.025,1,5,2,0,2,1,5,61.705922,308.529610,5,5,2,3

@@ -1,11 +1,12 @@
 #pragma once
 
+#include "prefix/prefix.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <chrono>
 #include <fstream>
 #include <mutex>
-#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -36,15 +37,18 @@ public:
     void seed_from_state(const RoutingState& state);
     void on_message_received();
     void on_parsed_events(std::size_t parsed_events);
-    void on_announce(uint32_t asn, const std::string& prefix_text);
-    void on_withdraw(const std::string& prefix_text);
+    void on_announce(uint32_t asn, const PrefixV4& prefix);
+    void on_announce(uint32_t asn, const PrefixV6& prefix);
+    void on_withdraw(const PrefixV4& prefix);
+    void on_withdraw(const PrefixV6& prefix);
     void set_active_prefix_counts(std::size_t active_v4, std::size_t active_v6);
     GrowthSample sample_now();
 
 private:
     std::mutex mutex_;
     std::unordered_set<uint32_t> ever_seen_asns_;
-    std::unordered_set<std::string> ever_seen_prefixes_;
+    std::unordered_set<PrefixV4, PrefixV4Hash> ever_seen_prefixes_v4_;
+    std::unordered_set<PrefixV6, PrefixV6Hash> ever_seen_prefixes_v6_;
     std::size_t raw_messages_received_ = 0;
     std::size_t parsed_events_total_ = 0;
     std::size_t announces_applied_ = 0;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/container/small_vector.hpp>
+
 #include "peer/peer_registry.h"
 #include "prefix/prefix.h"
 
@@ -11,16 +13,19 @@
 struct Observation {
     PeerId peer_id;
     uint32_t origin_asn;
-    std::uint64_t timestamp;
 };
 
 struct PrefixRecord {
-    std::vector<Observation> observations;
+    // Most prefixes are typically observed from only a few peers, so a small inline capacity
+    // avoids heap allocation on the common path while keeping the implementation simple.
+    boost::container::small_vector<Observation, 4> observations;
+    boost::container::small_vector<std::uint64_t, 4> timestamps;
 };
 
 struct StoredObservation {
     BinaryPrefix prefix;
     Observation observation;
+    std::uint64_t timestamp;
 };
 
 class RoutingState {

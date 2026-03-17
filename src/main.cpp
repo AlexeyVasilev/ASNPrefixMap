@@ -53,18 +53,17 @@ void apply_events(const std::vector<BgpEvent>& events,
     for (const auto& event : events) {
         const PeerId peer_id = registry.get_or_add(event.peer);
         const BinaryPrefix prefix = parse_prefix(event.prefix);
-        const std::string normalized_prefix = to_string(prefix);
 
         std::visit(
             [&](const auto& binary_prefix) {
                 if (event.type == EventType::Announce) {
                     state.announce(peer_id, binary_prefix, event.asn, event.timestamp);
                     ++stats.announces_applied;
-                    growth_stats.on_announce(event.asn, normalized_prefix);
+                    growth_stats.on_announce(event.asn, binary_prefix);
                 } else if (event.type == EventType::Withdraw) {
                     state.withdraw(peer_id, binary_prefix);
                     ++stats.withdraws_applied;
-                    growth_stats.on_withdraw(normalized_prefix);
+                    growth_stats.on_withdraw(binary_prefix);
                 }
             },
             prefix);
@@ -125,7 +124,6 @@ int main() {
 
         if (cfg.stop_on_keypress) {
             std::cerr << "[info] press Enter to stop\n";
-            // Optional local helper for interactive runs. In headless usage this stays disabled.
             std::thread([&stop_requested]() {
                 std::string line;
                 std::getline(std::cin, line);
