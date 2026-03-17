@@ -17,6 +17,10 @@ struct Config {
     std::string stats_output_file;
     std::size_t stats_interval_ms;
     bool stop_on_keypress;
+    bool plateau_detection_enabled;
+    std::size_t plateau_window_samples;
+    double plateau_prefix_rate_threshold;
+    double plateau_min_runtime_sec;
 };
 
 Config load_config(const std::string& path);

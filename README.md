@@ -21,6 +21,7 @@ and derives a stable prefix -> ASN mapping.
 - binary runtime prefix storage for IPv4 and IPv6
 - optional periodic growth statistics CSV output
 - small-vector optimization for per-prefix observations
+- heuristic plateau notification based on prefix growth rate
 
 ## Ingestion Flow
 
@@ -39,8 +40,14 @@ source -> raw JSON -> parser -> BgpEvent -> PeerRegistry -> binary prefix parse 
 `stats_interval_ms` sets the sampling interval.
 `stop_on_keypress` enables a local Enter-to-stop helper for interactive runs.
 
+`plateau_detection_enabled` enables heuristic plateau detection.
+`plateau_window_samples` controls the rolling average window size.
+`plateau_prefix_rate_threshold` is the average `new_prefixes_per_sec` threshold.
+`plateau_min_runtime_sec` prevents early detection before enough runtime has elapsed.
+
 Ever-seen ASN/prefix counts are tracked separately from active counts so temporary withdrawals do not reset growth history.
 Periodic sampling is intended for empirical growth measurement and future saturation estimation, not readiness detection yet.
+Plateau detection is only a heuristic and does not formally prove the table is complete.
 
 ## Snapshots
 

@@ -5,8 +5,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <chrono>
+#include <deque>
 #include <fstream>
 #include <mutex>
+#include <optional>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -28,11 +31,24 @@ struct GrowthSample {
     std::size_t withdraws_applied = 0;
 };
 
+struct PlateauSettings {
+    bool enabled = true;
+    std::size_t window_samples = 300;
+    double prefix_rate_threshold = 5.0;
+    double min_runtime_sec = 600.0;
+};
+
+struct PlateauStatus {
+    bool detected = false;
+    bool detected_on_this_sample = false;
+    double plateau_uptime_sec = 0.0;
+};
+
 class RoutingState;
 
 class GrowthStatsTracker {
 public:
-    GrowthStatsTracker();
+    explicit GrowthStatsTracker(const PlateauSettings& plateau_settings);
 
     void seed_from_state(const RoutingState& state);
     void on_message_received();
@@ -43,9 +59,12 @@ public:
     void on_withdraw(const PrefixV6& prefix);
     void set_active_prefix_counts(std::size_t active_v4, std::size_t active_v6);
     GrowthSample sample_now();
+    PlateauStatus plateau_status() const;
+    double runtime_sec() const;
 
 private:
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
+    PlateauSettings plateau_settings_;
     std::unordered_set<uint32_t> ever_seen_asns_;
     std::unordered_set<PrefixV4, PrefixV4Hash> ever_seen_prefixes_v4_;
     std::unordered_set<PrefixV6, PrefixV6Hash> ever_seen_prefixes_v6_;
@@ -59,6 +78,11 @@ private:
     std::size_t last_sample_prefix_count_ = 0;
     std::chrono::steady_clock::time_point started_at_;
     std::chrono::steady_clock::time_point last_sample_at_;
+    std::deque<double> recent_prefix_rates_;
+    double recent_prefix_rate_sum_ = 0.0;
+    bool plateau_detected_ = false;
+    double plateau_uptime_sec_ = 0.0;
+    bool plateau_detected_on_last_sample_ = false;
 };
 
 class StatsCsvWriter {
@@ -70,3 +94,5 @@ public:
 private:
     std::ofstream output_;
 };
+
+std::string format_duration_hms(double total_seconds);

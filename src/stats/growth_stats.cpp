@@ -2,8 +2,11 @@
 
 #include "routing_state.h"
 
+#include <cmath>
 #include <iomanip>
+#include <sstream>
 #include <stdexcept>
+#include <type_traits>
 
 namespace {
 
@@ -14,8 +17,9 @@ std::uint64_t current_timestamp_ms() {
 
 }  // namespace
 
-GrowthStatsTracker::GrowthStatsTracker()
-    : started_at_(std::chrono::steady_clock::now()),
+GrowthStatsTracker::GrowthStatsTracker(const PlateauSettings& plateau_settings)
+    : plateau_settings_(plateau_settings),
+      started_at_(std::chrono::steady_clock::now()),
       last_sample_at_(started_at_) {
 }
 
@@ -112,10 +116,48 @@ GrowthSample GrowthStatsTracker::sample_now() {
     sample.announces_applied = announces_applied_;
     sample.withdraws_applied = withdraws_applied_;
 
+    // Plateau detection is heuristic, not a proof of completeness. A rolling average is used
+    // instead of a single raw sample because instantaneous growth rates are noisy.
+    plateau_detected_on_last_sample_ = false;
+    if (plateau_settings_.enabled && plateau_settings_.window_samples > 0) {
+        recent_prefix_rates_.push_back(sample.new_prefixes_per_sec);
+        recent_prefix_rate_sum_ += sample.new_prefixes_per_sec;
+        while (recent_prefix_rates_.size() > plateau_settings_.window_samples) {
+            recent_prefix_rate_sum_ -= recent_prefix_rates_.front();
+            recent_prefix_rates_.pop_front();
+        }
+
+        if (!plateau_detected_ &&
+            recent_prefix_rates_.size() == plateau_settings_.window_samples &&
+            uptime_sec >= plateau_settings_.min_runtime_sec) {
+            const double average_rate = recent_prefix_rate_sum_ /
+                static_cast<double>(recent_prefix_rates_.size());
+            if (average_rate < plateau_settings_.prefix_rate_threshold) {
+                plateau_detected_ = true;
+                plateau_uptime_sec_ = uptime_sec;
+                plateau_detected_on_last_sample_ = true;
+            }
+        }
+    }
+
     last_sample_asn_count_ = total_asns;
     last_sample_prefix_count_ = total_prefixes;
     last_sample_at_ = now;
     return sample;
+}
+
+PlateauStatus GrowthStatsTracker::plateau_status() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return PlateauStatus{
+        plateau_detected_,
+        plateau_detected_on_last_sample_,
+        plateau_uptime_sec_,
+    };
+}
+
+double GrowthStatsTracker::runtime_sec() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at_).count();
 }
 
 StatsCsvWriter::StatsCsvWriter(const std::string& path)
@@ -154,4 +196,18 @@ void StatsCsvWriter::write_sample(const GrowthSample& sample) {
 
 void StatsCsvWriter::flush() {
     output_.flush();
+}
+
+std::string format_duration_hms(double total_seconds) {
+    const auto seconds = static_cast<long long>(std::floor(total_seconds));
+    const long long hours = seconds / 3600;
+    const long long minutes = (seconds % 3600) / 60;
+    const long long secs = seconds % 60;
+
+    std::ostringstream out;
+    out << std::setfill('0')
+        << std::setw(2) << hours << ':'
+        << std::setw(2) << minutes << ':'
+        << std::setw(2) << secs;
+    return out.str();
 }

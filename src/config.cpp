@@ -46,6 +46,10 @@ Config load_config(const std::string& path) {
     cfg.stats_output_file = "stats.csv";
     cfg.stats_interval_ms = 1000;
     cfg.stop_on_keypress = false;
+    cfg.plateau_detection_enabled = true;
+    cfg.plateau_window_samples = 300;
+    cfg.plateau_prefix_rate_threshold = 5.0;
+    cfg.plateau_min_runtime_sec = 600.0;
 
     std::ifstream file(path);
     if (!file) {
@@ -95,6 +99,14 @@ Config load_config(const std::string& path) {
             cfg.stats_interval_ms = static_cast<std::size_t>(std::stoull(value));
         } else if (key == "stop_on_keypress") {
             cfg.stop_on_keypress = parse_bool(value);
+        } else if (key == "plateau_detection_enabled") {
+            cfg.plateau_detection_enabled = parse_bool(value);
+        } else if (key == "plateau_window_samples") {
+            cfg.plateau_window_samples = static_cast<std::size_t>(std::stoull(value));
+        } else if (key == "plateau_prefix_rate_threshold") {
+            cfg.plateau_prefix_rate_threshold = std::stod(value);
+        } else if (key == "plateau_min_runtime_sec") {
+            cfg.plateau_min_runtime_sec = std::stod(value);
         }
     }
 

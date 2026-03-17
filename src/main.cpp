@@ -87,10 +87,17 @@ void print_stats(const IngestionStats& stats) {
 int main() {
     try {
         const Config cfg = load_config("config.ini");
+        const PlateauSettings plateau_settings{
+            cfg.plateau_detection_enabled,
+            cfg.plateau_window_samples,
+            cfg.plateau_prefix_rate_threshold,
+            cfg.plateau_min_runtime_sec,
+        };
+
         PeerRegistry peer_registry;
         RoutingState state;
         IngestionStats stats;
-        GrowthStatsTracker growth_stats;
+        GrowthStatsTracker growth_stats(plateau_settings);
         std::atomic<bool> stop_requested = false;
         std::atomic<bool> sampler_running = false;
         std::unique_ptr<StatsCsvWriter> stats_writer;
@@ -109,21 +116,33 @@ int main() {
             stats_writer = std::make_unique<StatsCsvWriter>(cfg.stats_output_file);
             sampler_running = true;
 
-            // Periodic sampling is useful because it lets us estimate mapping growth empirically
-            // over time without baking in premature readiness logic.
             sampler_thread = std::thread([&]() {
                 while (sampler_running.load()) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(cfg.stats_interval_ms));
                     if (!sampler_running.load()) {
                         break;
                     }
-                    stats_writer->write_sample(growth_stats.sample_now());
+
+                    const GrowthSample sample = growth_stats.sample_now();
+                    stats_writer->write_sample(sample);
+
+                    const PlateauStatus plateau = growth_stats.plateau_status();
+                    if (plateau.detected_on_this_sample) {
+                        std::cerr << "[plateau] uptime_sec=" << sample.uptime_sec
+                                  << " uptime_hms=" << format_duration_hms(sample.uptime_sec)
+                                  << " active_prefixes=" << sample.total_active_prefixes
+                                  << " total_unique_asns_ever_seen=" << sample.total_unique_asns_ever_seen
+                                  << " note=table appears broadly complete; you may stop if a stable mapping is enough"
+                                  << '\n';
+                    }
                 }
             });
         }
 
         if (cfg.stop_on_keypress) {
             std::cerr << "[info] press Enter to stop\n";
+            // Plateau detection only notifies; it does not stop automatically because the signal
+            // is heuristic and operator intent should remain explicit.
             std::thread([&stop_requested]() {
                 std::string line;
                 std::getline(std::cin, line);
@@ -133,10 +152,6 @@ int main() {
 
         std::unique_ptr<BgpSource> source = create_source(cfg);
 
-        // PeerRegistry keeps peer identity compact via PeerId.
-        // Prefix text is converted to binary runtime keys before it enters RoutingState.
-        // Snapshot and export stay text-based for manual inspection and interchange.
-        // Data flow: source -> raw JSON -> parser -> BgpEvent -> PeerRegistry/prefix parse -> RoutingState
         std::string message;
         while (!stop_requested.load() && source->next_message(message)) {
             ++stats.raw_messages_received;
@@ -162,11 +177,35 @@ int main() {
             if (sampler_thread.joinable()) {
                 sampler_thread.join();
             }
-            stats_writer->write_sample(growth_stats.sample_now());
+
+            const GrowthSample final_sample = growth_stats.sample_now();
+            stats_writer->write_sample(final_sample);
+            const PlateauStatus plateau = growth_stats.plateau_status();
+            if (plateau.detected_on_this_sample) {
+                std::cerr << "[plateau] uptime_sec=" << final_sample.uptime_sec
+                          << " uptime_hms=" << format_duration_hms(final_sample.uptime_sec)
+                          << " active_prefixes=" << final_sample.total_active_prefixes
+                          << " total_unique_asns_ever_seen=" << final_sample.total_unique_asns_ever_seen
+                          << " note=table appears broadly complete; you may stop if a stable mapping is enough"
+                          << '\n';
+            }
             stats_writer->flush();
         }
 
         print_stats(stats);
+        const double runtime_sec = growth_stats.runtime_sec();
+        std::cout << "runtime_sec=" << runtime_sec << '\n';
+        std::cout << "runtime_hms=" << format_duration_hms(runtime_sec) << '\n';
+
+        const PlateauStatus plateau = growth_stats.plateau_status();
+        if (plateau.detected) {
+            std::cout << "plateau_detected=true\n";
+            std::cout << "plateau_uptime_sec=" << plateau.plateau_uptime_sec << '\n';
+            std::cout << "plateau_uptime_hms=" << format_duration_hms(plateau.plateau_uptime_sec) << '\n';
+        } else {
+            std::cout << "plateau_detected=false\n";
+        }
+
         const SnapshotStats snapshot_stats = SnapshotIO::save_snapshot(cfg.snapshot_output, peer_registry, state);
         std::cerr << "[snapshot] saved " << cfg.snapshot_output << '\n';
         std::cerr << "[snapshot] wrote peers=" << snapshot_stats.peers
