@@ -106,3 +106,42 @@ make
 - IPv6 support
 - ASN metadata enrichment
 - IP longest-prefix lookup
+
+## Dataset Convergence (Plateau Detection)
+
+The system tracks how quickly new routing information is discovered over time.
+
+Initially, the number of unique prefixes and ASNs grows rapidly as data is ingested
+from the live BGP stream. Over time, the growth rate decreases and stabilizes,
+indicating that most globally visible routes have already been observed.
+
+Plateau detection is based on a rolling average of prefix discovery rate.
+
+### Prefix growth
+
+![Unique prefixes over time](docs/prefix_plateau.png)
+
+The system reaches a plateau at ~2163 seconds (~36 minutes), after which
+the number of newly discovered prefixes becomes negligible.
+
+### ASN growth
+
+![Unique ASNs over time](docs/asn_growth.png)
+
+ASN discovery stabilizes shortly after prefix growth, confirming that
+the routing table is broadly complete.
+
+### Example run
+
+```text
+[plateau] uptime_sec=2163.51 uptime_hms=00:36:03
+[plateau] active_prefixes=1293782 total_unique_asns_ever_seen=84951
+[plateau] note=table appears broadly complete; you may stop if a stable mapping is enough
+
+runtime_sec=5697.49
+runtime_hms=01:34:57
+plateau_detected=true
+plateau_uptime_sec=2163.51
+plateau_uptime_hms=00:36:03
+```
+
