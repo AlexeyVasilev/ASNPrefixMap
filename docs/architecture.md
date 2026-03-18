@@ -1,42 +1,129 @@
 # Architecture
 
-ASNPrefixMap maintains BGP observations per prefix and peer.
+ASNPrefixMap builds a practical ASN ↔ prefix mapping from live BGP updates received from RIS Live.
 
-Instead of implementing a full BGP router, the system builds
-a practical prefix -> origin ASN mapping.
+The system is intentionally **not** a full BGP router.  
+Instead, it maintains a compact routing-state model suitable for prefix-to-origin-ASN mapping, snapshot persistence, and export.
 
-## State model
+## High-Level Data Flow
 
-prefix -> peer -> observation
+```text
+RIS Live WebSocket
+        ↓
+Raw JSON messages
+        ↓
+RIS Live parser
+        ↓
+BgpEvent
+        ↓
+PeerRegistry
+        ↓
+RoutingState
+        ↓
+Snapshot / Export / Growth Stats
+```
 
-Example:
+## Core Components
+### RIS Live WebSocket Source
 
-8.8.8.0/24
+Responsible for:
 
-peer A -> AS15169  
-peer B -> AS15169
+* connecting to RIS Live over TLS/WebSocket
 
-## Aggregation
+* sending subscription requests
 
-The exported mapping selects the ASN that is observed from
-the largest number of peers.
+* reading raw JSON messages
 
-## Withdraw handling
+* reconnecting after transient network failures
 
-Withdraw events remove only the observation from the
-specific peer.
+This layer does not implement BGP logic. It only provides raw message transport.
 
-The prefix remains active if other peers still advertise it.
+### RIS Live Parser
 
-## Exported tables
+Converts raw RIS Live JSON messages into normalized BgpEvent objects.
 
-prefix_to_asn.tsv
+A single incoming message may produce:
 
+* zero events
 
-8.8.8.0/24 15169
+* one event
 
+* multiple announce/withdraw events
 
-asn_to_prefix.tsv
+### PeerRegistry
 
+Peer identity is normalized into a compact PeerId.
 
-15169 8.8.8.0/24
+Instead of storing peer strings repeatedly in the routing state, ASNPrefixMap stores:
+
+* PeerId in the hot path
+
+* full PeerInfo separately
+
+This reduces memory usage and avoids repeated string-heavy keys.
+
+### RoutingState
+
+RoutingState maintains active observations per prefix.
+
+Key properties:
+
+* binary prefix representation for IPv4 and IPv6
+
+* separate runtime storage for IPv4 and IPv6 prefixes
+
+* compact per-prefix observation storage
+
+* exported ASN selection based on peer observations
+
+The project uses a practical mapping model rather than full BGP best-path selection.
+
+### Snapshot
+
+Internal state can be persisted and restored.
+
+Snapshot design goals:
+
+* preserve enough information for correct withdraw handling after restart
+
+* remain human-readable
+
+* separate peer registry from observations
+
+Derived export tables are rebuilt from internal state after loading.
+
+### Export
+
+The system exports:
+
+* prefix_to_asn.tsv
+
+* asn_to_prefix.tsv
+
+These are text-based artifacts intended for downstream tools and manual inspection.
+
+### Growth Statistics and Plateau Detection
+
+ASNPrefixMap tracks:
+
+* unique prefixes ever seen
+
+* unique ASNs ever seen
+
+* active prefix counts
+
+* per-interval discovery rates
+
+Plateau detection is heuristic and reports when prefix growth stabilizes, indicating that the dataset is broadly complete.
+
+## Design Principles
+
+* Keep transport separate from parsing
+
+* Keep parsing separate from routing-state logic
+
+* Keep runtime storage compact
+
+* Keep snapshot/export text-based and debuggable
+
+* Prefer practical usefulness over full router-grade complexity

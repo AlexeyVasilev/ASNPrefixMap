@@ -8,7 +8,7 @@ High-performance C++20 tool for building ASN → Prefix mappings from live BGP s
 
 ## Dataset Convergence
 
-![Prefix growth](docs/prefix_growth_plateau.png)
+![Prefix growth](docs/prefix_plateau.png)
 ![ASN growth](docs/asn_growth.png)
 
 The system ingests live BGP updates and tracks how quickly new routing information is discovered.
@@ -43,11 +43,16 @@ plateau_uptime_hms=00:36:03
 ## Key Features
 
 Real-time ingestion via RIS Live WebSocket
-Efficient in-memory routing state (binary prefixes, PeerId)
-Snapshot persistence (human-readable format)
+
+Efficient in-memory routing state using binary prefixes and PeerId
+
+Snapshot persistence in a human-readable format
+
 Plateau detection for dataset convergence
-Automatic reconnect on network failures
-Growth statistics (ASN / prefix discovery rates)
+
+Automatic reconnect on transient network failures
+
+Growth statistics for ASN and prefix discovery rates
 
 ## Architecture
 
@@ -65,11 +70,15 @@ RIS Live WebSocket
 
 ## Performance Design
 
-No string allocations in hot ingest path
-Binary prefix representation (IPv4 / IPv6)
-small_vector optimization for prefix observations
-No exception-based parsing in prefix detection
-Cache-friendly data layout
+No string allocations in the hot ingest path
+
+Binary prefix representation for both IPv4 and IPv6
+
+small_vector optimization for per-prefix observations
+
+No exception-based prefix family detection in the hot path
+
+Cache-friendly routing-state layout
 
 ## Plateau Detection
 
@@ -80,15 +89,18 @@ When the rate drops below a threshold for a sustained period, the system reports
 Plateau detection is heuristic and does not guarantee full completeness.
 
 ## Usage
-
+```text
 mkdir build
 cd build
 cmake ..
 make
 ./asn_prefix_map
+```
 
 ## Future Work
 
 Query tool for snapshot
+
 HTTP API
+
 Docker image
