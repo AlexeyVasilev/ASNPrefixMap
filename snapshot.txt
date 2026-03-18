@@ -1,8 +1,0 @@
-# ASNPrefixMap snapshot v1
-
-[peers]
-1	rrc00	192.0.2.1	64500
-
-[observations]
-v4	8.8.4.0/24	1	15169	1710000000
-v4	8.8.8.0/24	1	15169	1710000000
