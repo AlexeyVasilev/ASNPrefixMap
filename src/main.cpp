@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstddef>
 #include <ctime>
 #include <filesystem>
@@ -25,6 +26,14 @@
 #include <vector>
 
 namespace {
+
+std::atomic<bool> g_signal_stop_requested = false;
+
+void handle_shutdown_signal(int signal_number) {
+    static_cast<void>(signal_number);
+    // Signal handlers must stay minimal and async-signal-safe. Only set a flag here.
+    g_signal_stop_requested.store(true);
+}
 
 struct IngestionStats {
     std::size_t raw_messages_received = 0;
@@ -111,6 +120,9 @@ void print_stats(const IngestionStats& stats) {
 
 int main() {
     try {
+        std::signal(SIGINT, handle_shutdown_signal);
+        std::signal(SIGTERM, handle_shutdown_signal);
+
         const Config cfg = load_config("config.ini");
         const PlateauSettings plateau_settings{
             cfg.plateau_detection_enabled,
@@ -172,8 +184,17 @@ int main() {
 
         std::unique_ptr<BgpSource> source = create_source(cfg);
 
+        // Cleanup is deliberately kept in normal control flow rather than inside the signal handler.
+        // In the current synchronous design, a blocking source read may delay shutdown slightly
+        // until next_message() returns and the loop can observe the stop flag.
         std::string message;
+        bool stopped_by_signal = false;
         while (!stop_requested.load() && source->next_message(message)) {
+            if (g_signal_stop_requested.load()) {
+                stopped_by_signal = true;
+                break;
+            }
+
             ++stats.raw_messages_received;
             growth_stats.on_message_received();
 
@@ -190,6 +211,15 @@ int main() {
             if (cfg.max_messages != 0 && stats.raw_messages_received >= cfg.max_messages) {
                 break;
             }
+        }
+
+        if (!stopped_by_signal && g_signal_stop_requested.load()) {
+            stopped_by_signal = true;
+        }
+
+        if (stopped_by_signal) {
+            std::cerr << "[signal] shutdown requested\n";
+            std::cerr << "[signal] saving current state\n";
         }
 
         if (cfg.stats_output_enabled) {

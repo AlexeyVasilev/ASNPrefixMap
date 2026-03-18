@@ -22,6 +22,7 @@ and derives a stable prefix -> ASN mapping.
 - optional periodic growth statistics CSV output
 - small-vector optimization for per-prefix observations
 - heuristic plateau notification based on prefix growth rate
+- graceful shutdown on Ctrl+C / SIGTERM
 
 ## Ingestion Flow
 
@@ -50,6 +51,12 @@ When stats output is enabled, the program creates a fresh file per run using a t
 Ever-seen ASN/prefix counts are tracked separately from active counts so temporary withdrawals do not reset growth history.
 Periodic sampling is intended for empirical growth measurement and future saturation estimation, not readiness detection yet.
 Plateau detection is only a heuristic and does not formally prove the table is complete.
+
+## Shutdown
+
+Ctrl+C and SIGTERM trigger graceful shutdown.
+The program stops ingesting, flushes stats, saves snapshot state, exports tables, and exits through the normal cleanup path.
+In the current synchronous design, a blocking source read may delay shutdown slightly until the next read returns.
 
 ## Snapshots
 
