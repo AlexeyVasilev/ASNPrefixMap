@@ -43,7 +43,6 @@ Config load_config(const std::string& path) {
     cfg.max_messages = 0;
     cfg.snapshot_output = "snapshot.txt";
     cfg.stats_output_enabled = false;
-    cfg.stats_output_file = "stats.csv";
     cfg.stats_interval_ms = 1000;
     cfg.stop_on_keypress = false;
     cfg.plateau_detection_enabled = true;
@@ -93,8 +92,6 @@ Config load_config(const std::string& path) {
             cfg.snapshot_output = value;
         } else if (key == "stats_output_enabled") {
             cfg.stats_output_enabled = parse_bool(value);
-        } else if (key == "stats_output_file") {
-            cfg.stats_output_file = value;
         } else if (key == "stats_interval_ms") {
             cfg.stats_interval_ms = static_cast<std::size_t>(std::stoull(value));
         } else if (key == "stop_on_keypress") {

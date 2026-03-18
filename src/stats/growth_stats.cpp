@@ -2,8 +2,8 @@
 
 #include "routing_state.h"
 
-#include <cmath>
 #include <iomanip>
+#include <cmath>
 #include <sstream>
 #include <stdexcept>
 #include <type_traits>
@@ -116,8 +116,6 @@ GrowthSample GrowthStatsTracker::sample_now() {
     sample.announces_applied = announces_applied_;
     sample.withdraws_applied = withdraws_applied_;
 
-    // Plateau detection is heuristic, not a proof of completeness. A rolling average is used
-    // instead of a single raw sample because instantaneous growth rates are noisy.
     plateau_detected_on_last_sample_ = false;
     if (plateau_settings_.enabled && plateau_settings_.window_samples > 0) {
         recent_prefix_rates_.push_back(sample.new_prefixes_per_sec);
@@ -161,18 +159,15 @@ double GrowthStatsTracker::runtime_sec() const {
 }
 
 StatsCsvWriter::StatsCsvWriter(const std::string& path)
-    : output_(path, std::ios::app) {
+    : output_(path, std::ios::trunc) {
     if (!output_) {
         throw std::runtime_error("Failed to open stats output file: " + path);
     }
 
-    output_.seekp(0, std::ios::end);
-    if (output_.tellp() == 0) {
-        output_ << "timestamp_ms,uptime_sec,total_unique_asns_ever_seen,total_unique_prefixes_ever_seen,"
-                << "total_active_prefixes_v4,total_active_prefixes_v6,total_active_prefixes,"
-                << "new_asns_in_interval,new_prefixes_in_interval,new_asns_per_sec,new_prefixes_per_sec,"
-                << "raw_messages_received,parsed_events_total,announces_applied,withdraws_applied\n";
-    }
+    output_ << "timestamp_ms,uptime_sec,total_unique_asns_ever_seen,total_unique_prefixes_ever_seen,"
+            << "total_active_prefixes_v4,total_active_prefixes_v6,total_active_prefixes,"
+            << "new_asns_in_interval,new_prefixes_in_interval,new_asns_per_sec,new_prefixes_per_sec,"
+            << "raw_messages_received,parsed_events_total,announces_applied,withdraws_applied\n";
 }
 
 void StatsCsvWriter::write_sample(const GrowthSample& sample) {

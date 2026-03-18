@@ -36,9 +36,11 @@ source -> raw JSON -> parser -> BgpEvent -> PeerRegistry -> binary prefix parse 
 ## Growth Stats
 
 `stats_output_enabled` enables periodic CSV sampling.
-`stats_output_file` selects the CSV path.
 `stats_interval_ms` sets the sampling interval.
 `stop_on_keypress` enables a local Enter-to-stop helper for interactive runs.
+
+When stats output is enabled, the program creates a fresh file per run using a timestamped name such as
+`stats_2026-03-16_142224.csv`.
 
 `plateau_detection_enabled` enables heuristic plateau detection.
 `plateau_window_samples` controls the rolling average window size.

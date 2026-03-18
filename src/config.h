@@ -14,7 +14,6 @@ struct Config {
     std::string snapshot_input;
     std::string snapshot_output;
     bool stats_output_enabled;
-    std::string stats_output_file;
     std::size_t stats_interval_ms;
     bool stop_on_keypress;
     bool plateau_detection_enabled;

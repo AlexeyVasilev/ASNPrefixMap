@@ -11,10 +11,14 @@
 #include "stats/growth_stats.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
+#include <ctime>
 #include <filesystem>
+#include <iomanip>
 #include <memory>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -29,6 +33,27 @@ struct IngestionStats {
     std::size_t withdraws_applied = 0;
     std::size_t ignored_messages = 0;
 };
+
+std::string make_stats_filename() {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t time = std::chrono::system_clock::to_time_t(now);
+
+    std::tm local_time{};
+    localtime_s(&local_time, &time);
+
+    std::ostringstream out;
+    out << "stats_" << std::put_time(&local_time, "%Y-%m-%d_%H%M%S") << ".csv";
+    return out.str();
+}
+
+void print_plateau_message(const GrowthSample& sample) {
+    std::cerr << "[plateau] uptime_sec=" << sample.uptime_sec
+              << " uptime_hms=" << format_duration_hms(sample.uptime_sec) << '\n';
+    std::cerr << "[plateau] active_prefixes=" << sample.total_active_prefixes
+              << " total_unique_asns_ever_seen=" << sample.total_unique_asns_ever_seen << '\n';
+    std::cerr << "[plateau] note=table appears broadly complete; you may stop if a stable mapping is enough"
+              << '\n';
+}
 
 std::unique_ptr<BgpSource> create_source(const Config& cfg) {
     if (cfg.source == "file_jsonl") {
@@ -113,7 +138,9 @@ int main() {
         growth_stats.seed_from_state(state);
 
         if (cfg.stats_output_enabled) {
-            stats_writer = std::make_unique<StatsCsvWriter>(cfg.stats_output_file);
+            const std::string stats_file = make_stats_filename();
+            stats_writer = std::make_unique<StatsCsvWriter>(stats_file);
+            std::cerr << "[stats] writing " << stats_file << '\n';
             sampler_running = true;
 
             sampler_thread = std::thread([&]() {
@@ -128,12 +155,7 @@ int main() {
 
                     const PlateauStatus plateau = growth_stats.plateau_status();
                     if (plateau.detected_on_this_sample) {
-                        std::cerr << "[plateau] uptime_sec=" << sample.uptime_sec
-                                  << " uptime_hms=" << format_duration_hms(sample.uptime_sec)
-                                  << " active_prefixes=" << sample.total_active_prefixes
-                                  << " total_unique_asns_ever_seen=" << sample.total_unique_asns_ever_seen
-                                  << " note=table appears broadly complete; you may stop if a stable mapping is enough"
-                                  << '\n';
+                        print_plateau_message(sample);
                     }
                 }
             });
@@ -141,8 +163,6 @@ int main() {
 
         if (cfg.stop_on_keypress) {
             std::cerr << "[info] press Enter to stop\n";
-            // Plateau detection only notifies; it does not stop automatically because the signal
-            // is heuristic and operator intent should remain explicit.
             std::thread([&stop_requested]() {
                 std::string line;
                 std::getline(std::cin, line);
@@ -182,12 +202,7 @@ int main() {
             stats_writer->write_sample(final_sample);
             const PlateauStatus plateau = growth_stats.plateau_status();
             if (plateau.detected_on_this_sample) {
-                std::cerr << "[plateau] uptime_sec=" << final_sample.uptime_sec
-                          << " uptime_hms=" << format_duration_hms(final_sample.uptime_sec)
-                          << " active_prefixes=" << final_sample.total_active_prefixes
-                          << " total_unique_asns_ever_seen=" << final_sample.total_unique_asns_ever_seen
-                          << " note=table appears broadly complete; you may stop if a stable mapping is enough"
-                          << '\n';
+                print_plateau_message(final_sample);
             }
             stats_writer->flush();
         }
