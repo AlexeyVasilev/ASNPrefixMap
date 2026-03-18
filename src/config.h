@@ -16,6 +16,10 @@ struct Config {
     bool stats_output_enabled;
     std::size_t stats_interval_ms;
     bool stop_on_keypress;
+    bool reconnect_enabled;
+    std::size_t reconnect_initial_delay_ms;
+    std::size_t reconnect_max_delay_ms;
+    std::size_t reconnect_max_attempts;
     bool plateau_detection_enabled;
     std::size_t plateau_window_samples;
     double plateau_prefix_rate_threshold;

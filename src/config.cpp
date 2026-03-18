@@ -45,6 +45,10 @@ Config load_config(const std::string& path) {
     cfg.stats_output_enabled = false;
     cfg.stats_interval_ms = 1000;
     cfg.stop_on_keypress = false;
+    cfg.reconnect_enabled = true;
+    cfg.reconnect_initial_delay_ms = 1000;
+    cfg.reconnect_max_delay_ms = 30000;
+    cfg.reconnect_max_attempts = 0;
     cfg.plateau_detection_enabled = true;
     cfg.plateau_window_samples = 300;
     cfg.plateau_prefix_rate_threshold = 5.0;
@@ -96,6 +100,14 @@ Config load_config(const std::string& path) {
             cfg.stats_interval_ms = static_cast<std::size_t>(std::stoull(value));
         } else if (key == "stop_on_keypress") {
             cfg.stop_on_keypress = parse_bool(value);
+        } else if (key == "reconnect_enabled") {
+            cfg.reconnect_enabled = parse_bool(value);
+        } else if (key == "reconnect_initial_delay_ms") {
+            cfg.reconnect_initial_delay_ms = static_cast<std::size_t>(std::stoull(value));
+        } else if (key == "reconnect_max_delay_ms") {
+            cfg.reconnect_max_delay_ms = static_cast<std::size_t>(std::stoull(value));
+        } else if (key == "reconnect_max_attempts") {
+            cfg.reconnect_max_attempts = static_cast<std::size_t>(std::stoull(value));
         } else if (key == "plateau_detection_enabled") {
             cfg.plateau_detection_enabled = parse_bool(value);
         } else if (key == "plateau_window_samples") {

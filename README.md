@@ -23,6 +23,7 @@ and derives a stable prefix -> ASN mapping.
 - small-vector optimization for per-prefix observations
 - heuristic plateau notification based on prefix growth rate
 - graceful shutdown on Ctrl+C / SIGTERM
+- automatic reconnect for transient RIS Live WebSocket drops
 
 ## Ingestion Flow
 
@@ -33,6 +34,7 @@ source -> raw JSON -> parser -> BgpEvent -> PeerRegistry -> binary prefix parse 
 
 `file_jsonl` is a replay source for raw RIS Live JSON lines.
 `ris_live_ws` is a live WebSocket source using the same parser flow.
+The live source now auto-reconnects after transient read or connection failures and resends the RIS Live subscription.
 
 ## Growth Stats
 
@@ -51,6 +53,15 @@ When stats output is enabled, the program creates a fresh file per run using a t
 Ever-seen ASN/prefix counts are tracked separately from active counts so temporary withdrawals do not reset growth history.
 Periodic sampling is intended for empirical growth measurement and future saturation estimation, not readiness detection yet.
 Plateau detection is only a heuristic and does not formally prove the table is complete.
+
+## Reconnect
+
+`reconnect_enabled` controls live WebSocket reconnect behavior.
+`reconnect_initial_delay_ms` and `reconnect_max_delay_ms` control simple reconnect backoff.
+`reconnect_max_attempts` limits reconnect tries, where `0` means unlimited.
+
+Reconnect is best-effort. The process stays alive across transient connection failures, but live updates may still be missed during the outage window.
+Shutdown requests stop reconnect attempts so the process can exit cleanly.
 
 ## Shutdown
 

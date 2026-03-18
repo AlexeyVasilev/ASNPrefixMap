@@ -35,6 +35,10 @@ void handle_shutdown_signal(int signal_number) {
     g_signal_stop_requested.store(true);
 }
 
+bool shutdown_requested(const std::atomic<bool>& stop_requested) {
+    return stop_requested.load() || g_signal_stop_requested.load();
+}
+
 struct IngestionStats {
     std::size_t raw_messages_received = 0;
     std::size_t parsed_events_total = 0;
@@ -64,7 +68,8 @@ void print_plateau_message(const GrowthSample& sample) {
               << '\n';
 }
 
-std::unique_ptr<BgpSource> create_source(const Config& cfg) {
+std::unique_ptr<BgpSource> create_source(const Config& cfg,
+                                         const std::atomic<bool>& stop_requested) {
     if (cfg.source == "file_jsonl") {
         return std::make_unique<FileJsonlSource>(cfg.input_file);
     }
@@ -73,7 +78,12 @@ std::unique_ptr<BgpSource> create_source(const Config& cfg) {
         return std::make_unique<RisLiveWebSocketSource>(
             cfg.ris_live_host,
             cfg.ris_live_port,
-            cfg.ris_live_target);
+            cfg.ris_live_target,
+            cfg.reconnect_enabled,
+            cfg.reconnect_initial_delay_ms,
+            cfg.reconnect_max_delay_ms,
+            cfg.reconnect_max_attempts,
+            [&stop_requested]() { return shutdown_requested(stop_requested); });
     }
 
     throw std::runtime_error("Unsupported source: " + cfg.source);
@@ -182,14 +192,14 @@ int main() {
             }).detach();
         }
 
-        std::unique_ptr<BgpSource> source = create_source(cfg);
+        std::unique_ptr<BgpSource> source = create_source(cfg, stop_requested);
 
         // Cleanup is deliberately kept in normal control flow rather than inside the signal handler.
         // In the current synchronous design, a blocking source read may delay shutdown slightly
         // until next_message() returns and the loop can observe the stop flag.
         std::string message;
         bool stopped_by_signal = false;
-        while (!stop_requested.load() && source->next_message(message)) {
+        while (!shutdown_requested(stop_requested) && source->next_message(message)) {
             if (g_signal_stop_requested.load()) {
                 stopped_by_signal = true;
                 break;
