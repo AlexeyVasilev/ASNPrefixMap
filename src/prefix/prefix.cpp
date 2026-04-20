@@ -4,11 +4,51 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
+#if defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#endif
 
 namespace {
+
+#if defined(_WIN32)
+int inet_pton_ipv4(const char* text, void* out) {
+    return InetPtonA(AF_INET, text, out);
+}
+
+int inet_pton_ipv6(const char* text, void* out) {
+    return InetPtonA(AF_INET6, text, out);
+}
+
+const char* inet_ntop_ipv4(const void* src, char* dst, std::size_t size) {
+    return InetNtopA(AF_INET, src, dst, static_cast<DWORD>(size));
+}
+
+const char* inet_ntop_ipv6(const void* src, char* dst, std::size_t size) {
+    return InetNtopA(AF_INET6, src, dst, static_cast<DWORD>(size));
+}
+#else
+int inet_pton_ipv4(const char* text, void* out) {
+    return inet_pton(AF_INET, text, out);
+}
+
+int inet_pton_ipv6(const char* text, void* out) {
+    return inet_pton(AF_INET6, text, out);
+}
+
+const char* inet_ntop_ipv4(const void* src, char* dst, std::size_t size) {
+    return inet_ntop(AF_INET, src, dst, static_cast<socklen_t>(size));
+}
+
+const char* inet_ntop_ipv6(const void* src, char* dst, std::size_t size) {
+    return inet_ntop(AF_INET6, src, dst, static_cast<socklen_t>(size));
+}
+#endif
 
 uint32_t apply_mask_v4(uint32_t network, uint8_t length) {
     if (length == 0) {
@@ -99,11 +139,15 @@ PrefixV4 parse_prefix_v4(const std::string& cidr_text) {
     }
 
     in_addr addr{};
-    if (InetPtonA(AF_INET, address.c_str(), &addr) != 1) {
+    if (inet_pton_ipv4(address.c_str(), &addr) != 1) {
         throw std::runtime_error("Invalid IPv4 prefix: " + cidr_text);
     }
 
+#if defined(_WIN32)
     const uint32_t host_order = ntohl(addr.S_un.S_addr);
+#else
+    const uint32_t host_order = ntohl(addr.s_addr);
+#endif
     return PrefixV4{apply_mask_v4(host_order, length), length};
 }
 
@@ -114,7 +158,7 @@ PrefixV6 parse_prefix_v6(const std::string& cidr_text) {
     }
 
     in6_addr addr6{};
-    if (InetPtonA(AF_INET6, address.c_str(), &addr6) != 1) {
+    if (inet_pton_ipv6(address.c_str(), &addr6) != 1) {
         throw std::runtime_error("Invalid IPv6 prefix: " + cidr_text);
     }
 
@@ -125,10 +169,14 @@ PrefixV6 parse_prefix_v6(const std::string& cidr_text) {
 
 std::string to_string(const PrefixV4& prefix) {
     in_addr addr{};
+#if defined(_WIN32)
     addr.S_un.S_addr = htonl(prefix.network);
+#else
+    addr.s_addr = htonl(prefix.network);
+#endif
 
     char buffer[INET_ADDRSTRLEN] = {};
-    if (InetNtopA(AF_INET, &addr, buffer, sizeof(buffer)) == nullptr) {
+    if (inet_ntop_ipv4(&addr, buffer, sizeof(buffer)) == nullptr) {
         throw std::runtime_error("Failed to stringify IPv4 prefix");
     }
 
@@ -140,7 +188,7 @@ std::string to_string(const PrefixV6& prefix) {
     std::memcpy(&addr6, prefix.network.data(), prefix.network.size());
 
     char buffer[INET6_ADDRSTRLEN] = {};
-    if (InetNtopA(AF_INET6, &addr6, buffer, sizeof(buffer)) == nullptr) {
+    if (inet_ntop_ipv6(&addr6, buffer, sizeof(buffer)) == nullptr) {
         throw std::runtime_error("Failed to stringify IPv6 prefix");
     }
 

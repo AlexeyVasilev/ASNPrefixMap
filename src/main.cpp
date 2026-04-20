@@ -52,7 +52,11 @@ std::string make_stats_filename() {
     const std::time_t time = std::chrono::system_clock::to_time_t(now);
 
     std::tm local_time{};
+#if defined(_WIN32)
     localtime_s(&local_time, &time);
+#else
+    localtime_r(&time, &local_time);
+#endif
 
     std::ostringstream out;
     out << "stats_" << std::put_time(&local_time, "%Y-%m-%d_%H%M%S") << ".csv";
@@ -273,3 +277,4 @@ int main() {
         return 1;
     }
 }
+

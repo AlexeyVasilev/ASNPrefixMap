@@ -9,6 +9,7 @@ include(FetchContent)
 
 find_package(nlohmann_json CONFIG QUIET)
 find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
 
 if (NOT nlohmann_json_FOUND)
     find_path(NLOHMANN_JSON_INCLUDE_DIR nlohmann/json.hpp)
@@ -44,10 +45,16 @@ target_link_libraries(ASNPrefixMap PRIVATE
     nlohmann_json::nlohmann_json
     OpenSSL::SSL
     OpenSSL::Crypto
-    ws2_32
-    wsock32
-    bcrypt
+    Threads::Threads
 )
+
+if (WIN32)
+    target_link_libraries(ASNPrefixMap PRIVATE
+        ws2_32
+        wsock32
+        bcrypt
+    )
+endif()
 
 add_executable(ASNPrefixMapRisLiveDemo
     src/ris_live_demo.cpp
