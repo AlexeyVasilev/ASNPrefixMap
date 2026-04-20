@@ -1,3 +1,4 @@
+#include "error_format.h"
 #include "ris_live_websocket_source.h"
 
 #include <boost/asio/connect.hpp>
@@ -55,7 +56,7 @@ RisLiveWebSocketSource::~RisLiveWebSocketSource() {
         websocket_->close(websocket::close_code::normal);
         std::cerr << "[ris_live_ws] disconnect\n";
     } catch (const std::exception& ex) {
-        std::cerr << "[ris_live_ws] disconnect error: " << ex.what() << '\n';
+        std::cerr << "[ris_live_ws] disconnect error: " << format_exception_message(ex) << '\n';
     }
 }
 
@@ -73,7 +74,7 @@ bool RisLiveWebSocketSource::next_message(std::string& json) {
         } catch (const std::exception& ex) {
             // Transient network or TLS errors should not terminate a long-running ingest.
             // Reconnect is best-effort and some live messages may be missed during the outage.
-            std::cerr << "[ris_live_ws] read error: " << ex.what() << '\n';
+            std::cerr << "[ris_live_ws] read error: " << format_exception_message(ex) << '\n';
             reset_connection();
         }
     }
@@ -98,7 +99,7 @@ bool RisLiveWebSocketSource::ensure_connected() {
             delay_before_reconnect_ = false;
             return true;
         } catch (const std::exception& ex) {
-            std::cerr << "[ris_live_ws] connect error: " << ex.what() << '\n';
+            std::cerr << "[ris_live_ws] connect error: " << format_exception_message(ex) << '\n';
             reset_connection();
             return false;
         }
@@ -135,13 +136,13 @@ bool RisLiveWebSocketSource::reconnect_with_backoff() {
         } catch (const std::exception& ex) {
             reset_connection();
             if (reconnect_max_attempts_ != 0 && attempt >= reconnect_max_attempts_) {
-                std::cerr << "[ris_live_ws] reconnect failure: " << ex.what() << "\n";
+                std::cerr << "[ris_live_ws] reconnect failure: " << format_exception_message(ex) << "\n";
                 return false;
             }
 
             delay_before_attempt = true;
             const std::size_t next_delay_ms = std::min(delay_ms * 2, reconnect_max_delay_ms_);
-            std::cerr << "[ris_live_ws] reconnect failure: " << ex.what()
+            std::cerr << "[ris_live_ws] reconnect failure: " << format_exception_message(ex)
                       << "; next delay " << next_delay_ms << " ms\n";
             delay_ms = next_delay_ms;
             next_reconnect_delay_ms_ = delay_ms;
@@ -217,4 +218,5 @@ bool RisLiveWebSocketSource::sleep_with_stop(std::size_t delay_ms) const {
 
     return !shutdown_requested();
 }
+
 

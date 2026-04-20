@@ -1,4 +1,5 @@
 #include "bgp_event.h"
+#include "error_format.h"
 #include "config.h"
 #include "parser/ris_live_parser.h"
 #include "peer/peer_registry.h"
@@ -273,8 +274,9 @@ int main() {
         std::cout << "Done\n";
         return 0;
     } catch (const std::exception& ex) {
-        std::cerr << "Error: " << ex.what() << '\n';
+        std::cerr << "Error: " << format_exception_message(ex) << '\n';
         return 1;
     }
 }
+
 
