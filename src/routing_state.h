@@ -19,7 +19,14 @@ struct PrefixRecord {
     // Most prefixes are typically observed from only a few peers, so a small inline capacity
     // avoids heap allocation on the common path while keeping the implementation simple.
     boost::container::small_vector<Observation, 4> observations;
+    // Timestamp is only needed for snapshot/debug fidelity, so it stays in a side array
+    // instead of bloating the hot Observation layout.
     boost::container::small_vector<std::uint64_t, 4> timestamps;
+    // Full recomputation over all observations on every update was too expensive in the hot path.
+    // Keep per-prefix ASN counters and the current winner so announce/withdraw only touch changed ASNs.
+    std::unordered_map<uint32_t, uint32_t> asn_counts;
+    uint32_t selected_asn = 0;
+    uint32_t selected_count = 0;
 };
 
 struct StoredObservation {
