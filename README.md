@@ -55,7 +55,7 @@ Automatic reconnect on transient network failures
 Growth statistics for ASN and prefix discovery rates
 
 ## Architecture
-
+```text
 RIS Live WebSocket
         ↓
     JSON Parser
@@ -67,7 +67,7 @@ RIS Live WebSocket
  RoutingState (binary prefixes)
         ↓
  Snapshot / Export
-
+```
 ## Performance Design
 
 No string allocations in the hot ingest path
