@@ -93,15 +93,13 @@ std::unique_ptr<BgpSource> create_source(const Config& cfg,
 }
 
 void apply_event(EventType type,
-                 const PeerInfo& peer,
+                 PeerId peer_id,
                  const std::string& prefix_text,
                  uint32_t origin_asn,
                  std::uint64_t timestamp,
-                 PeerRegistry& registry,
                  RoutingState& state,
                  IngestionStats& stats,
                  GrowthStatsTracker& growth_stats) {
-    const PeerId peer_id = registry.get_or_add(peer);
     const BinaryPrefix prefix = parse_prefix(prefix_text);
 
     std::visit(
@@ -192,6 +190,9 @@ int main() {
             ++stats.raw_messages_received;
             growth_stats.on_message_received();
 
+            bool peer_resolved = false;
+            PeerId cached_peer_id = 0;
+
             const std::size_t emitted_events = parse_ris_live_message(
                 message,
                 [&](EventType type,
@@ -199,14 +200,20 @@ int main() {
                     const std::string& prefix,
                     uint32_t origin_asn,
                     std::uint64_t timestamp) {
+                    // All events emitted from one raw RIS Live message share the same PeerInfo,
+                    // so PeerId resolution only needs to happen once per parsed message.
+                    if (!peer_resolved) {
+                        cached_peer_id = peer_registry.get_or_add(peer);
+                        peer_resolved = true;
+                    }
+
                     // The parser now feeds raw event fields straight into the ingest path,
                     // avoiding both the temporary event vector and a temporary BgpEvent object.
                     apply_event(type,
-                                peer,
+                                cached_peer_id,
                                 prefix,
                                 origin_asn,
                                 timestamp,
-                                peer_registry,
                                 state,
                                 stats,
                                 growth_stats);
