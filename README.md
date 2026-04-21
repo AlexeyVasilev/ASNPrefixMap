@@ -70,15 +70,38 @@ RIS Live WebSocket
 ```
 ## Performance Design
 
-No string allocations in the hot ingest path
+The system is designed as a streaming pipeline with a focus on minimizing hot-path overhead.
 
-Binary prefix representation for both IPv4 and IPv6
+Key optimizations:
 
-small_vector optimization for per-prefix observations
+- Incremental prefix-origin selection  
+  (avoids full recomputation on every update)
 
-No exception-based prefix family detection in the hot path
+- Packed observation storage  
+  (swap-with-back removal instead of erase)
 
-Cache-friendly routing-state layout
+- No temporary event containers  
+  (parser emits events directly via callback)
+
+- No temporary event objects  
+  (fields passed directly instead of materializing structures)
+
+- PeerId cached per message  
+  (avoids repeated hash/map lookups)
+
+- Single-threaded stats sampling  
+  (no locking in the ingest path)
+
+- Prefix strings passed by reference from JSON  
+  (avoids per-event string allocations)
+
+Remaining costs / trade-offs:
+
+- JSON is parsed via DOM (nlohmann::json) for simplicity
+- PeerInfo stores owning strings (for snapshot/export stability)
+- Prefix parsing still happens per event
+
+The current design prioritizes clarity and correctness, while incrementally reducing hot-path overhead.
 
 ## Plateau Detection
 
