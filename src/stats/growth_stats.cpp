@@ -24,8 +24,6 @@ GrowthStatsTracker::GrowthStatsTracker(const PlateauSettings& plateau_settings)
 }
 
 void GrowthStatsTracker::seed_from_state(const RoutingState& state) {
-    std::lock_guard<std::mutex> lock(mutex_);
-
     for (const auto& stored : state.stored_observations()) {
         ever_seen_asns_.insert(stored.observation.origin_asn);
         std::visit(
@@ -47,50 +45,41 @@ void GrowthStatsTracker::seed_from_state(const RoutingState& state) {
 }
 
 void GrowthStatsTracker::on_message_received() {
-    std::lock_guard<std::mutex> lock(mutex_);
     ++raw_messages_received_;
 }
 
 void GrowthStatsTracker::on_parsed_events(std::size_t parsed_events) {
-    std::lock_guard<std::mutex> lock(mutex_);
     parsed_events_total_ += parsed_events;
 }
 
 void GrowthStatsTracker::on_announce(uint32_t asn, const PrefixV4& prefix) {
-    std::lock_guard<std::mutex> lock(mutex_);
     ever_seen_asns_.insert(asn);
     ever_seen_prefixes_v4_.insert(prefix);
     ++announces_applied_;
 }
 
 void GrowthStatsTracker::on_announce(uint32_t asn, const PrefixV6& prefix) {
-    std::lock_guard<std::mutex> lock(mutex_);
     ever_seen_asns_.insert(asn);
     ever_seen_prefixes_v6_.insert(prefix);
     ++announces_applied_;
 }
 
 void GrowthStatsTracker::on_withdraw(const PrefixV4& prefix) {
-    std::lock_guard<std::mutex> lock(mutex_);
     ever_seen_prefixes_v4_.insert(prefix);
     ++withdraws_applied_;
 }
 
 void GrowthStatsTracker::on_withdraw(const PrefixV6& prefix) {
-    std::lock_guard<std::mutex> lock(mutex_);
     ever_seen_prefixes_v6_.insert(prefix);
     ++withdraws_applied_;
 }
 
 void GrowthStatsTracker::set_active_prefix_counts(std::size_t active_v4, std::size_t active_v6) {
-    std::lock_guard<std::mutex> lock(mutex_);
     active_prefixes_v4_ = active_v4;
     active_prefixes_v6_ = active_v6;
 }
 
 GrowthSample GrowthStatsTracker::sample_now() {
-    std::lock_guard<std::mutex> lock(mutex_);
-
     const auto now = std::chrono::steady_clock::now();
     const double uptime_sec = std::chrono::duration<double>(now - started_at_).count();
     const double interval_sec = std::chrono::duration<double>(now - last_sample_at_).count();
@@ -145,7 +134,6 @@ GrowthSample GrowthStatsTracker::sample_now() {
 }
 
 PlateauStatus GrowthStatsTracker::plateau_status() const {
-    std::lock_guard<std::mutex> lock(mutex_);
     return PlateauStatus{
         plateau_detected_,
         plateau_detected_on_last_sample_,
@@ -154,7 +142,6 @@ PlateauStatus GrowthStatsTracker::plateau_status() const {
 }
 
 double GrowthStatsTracker::runtime_sec() const {
-    std::lock_guard<std::mutex> lock(mutex_);
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - started_at_).count();
 }
 

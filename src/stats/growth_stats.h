@@ -7,7 +7,6 @@
 #include <chrono>
 #include <deque>
 #include <fstream>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_set>
@@ -63,7 +62,8 @@ public:
     double runtime_sec() const;
 
 private:
-    mutable std::mutex mutex_;
+    // The tracker is intentionally single-threaded now: ingest updates and sampling both
+    // happen from the main loop, which removes the mutex overhead that the old sampler thread required.
     PlateauSettings plateau_settings_;
     std::unordered_set<uint32_t> ever_seen_asns_;
     std::unordered_set<PrefixV4, PrefixV4Hash> ever_seen_prefixes_v4_;

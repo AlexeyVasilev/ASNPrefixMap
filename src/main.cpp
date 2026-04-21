@@ -144,9 +144,8 @@ int main() {
         IngestionStats stats;
         GrowthStatsTracker growth_stats(plateau_settings);
         std::atomic<bool> stop_requested = false;
-        std::atomic<bool> sampler_running = false;
         std::unique_ptr<StatsCsvWriter> stats_writer;
-        std::thread sampler_thread;
+        std::chrono::steady_clock::time_point next_stats_sample_at{};
 
         if (!cfg.snapshot_input.empty() && std::filesystem::exists(cfg.snapshot_input)) {
             const SnapshotStats snapshot_stats = SnapshotIO::load_snapshot(cfg.snapshot_input, peer_registry, state);
@@ -161,24 +160,8 @@ int main() {
             const std::string stats_file = make_stats_filename();
             stats_writer = std::make_unique<StatsCsvWriter>(stats_file);
             std::cerr << "[stats] writing " << stats_file << '\n';
-            sampler_running = true;
-
-            sampler_thread = std::thread([&]() {
-                while (sampler_running.load()) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(cfg.stats_interval_ms));
-                    if (!sampler_running.load()) {
-                        break;
-                    }
-
-                    const GrowthSample sample = growth_stats.sample_now();
-                    stats_writer->write_sample(sample);
-
-                    const PlateauStatus plateau = growth_stats.plateau_status();
-                    if (plateau.detected_on_this_sample) {
-                        print_plateau_message(sample);
-                    }
-                }
-            });
+            next_stats_sample_at = std::chrono::steady_clock::now() +
+                std::chrono::milliseconds(cfg.stats_interval_ms);
         }
 
         if (cfg.stop_on_keypress) {
@@ -224,6 +207,22 @@ int main() {
                     state.active_prefixes_v6_count());
             }
 
+            // The previous sampler thread needed mutexes because sampling raced with ingest updates.
+            // In the current synchronous design, sampling directly from the main loop is a better fit:
+            // it removes lock overhead from hot-path stats updates while keeping the same CSV output.
+            if (cfg.stats_output_enabled && std::chrono::steady_clock::now() >= next_stats_sample_at) {
+                const GrowthSample sample = growth_stats.sample_now();
+                stats_writer->write_sample(sample);
+
+                const PlateauStatus plateau = growth_stats.plateau_status();
+                if (plateau.detected_on_this_sample) {
+                    print_plateau_message(sample);
+                }
+
+                next_stats_sample_at = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds(cfg.stats_interval_ms);
+            }
+
             if (cfg.max_messages != 0 && stats.raw_messages_received >= cfg.max_messages) {
                 break;
             }
@@ -239,11 +238,6 @@ int main() {
         }
 
         if (cfg.stats_output_enabled) {
-            sampler_running = false;
-            if (sampler_thread.joinable()) {
-                sampler_thread.join();
-            }
-
             const GrowthSample final_sample = growth_stats.sample_now();
             stats_writer->write_sample(final_sample);
             const PlateauStatus plateau = growth_stats.plateau_status();
