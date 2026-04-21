@@ -1,8 +1,8 @@
 #include "ris_live_parser.h"
 
 #include <cstdint>
+#include <cstddef>
 #include <string>
-#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -66,7 +66,9 @@ bool try_get_origin_asn(const json& data, uint32_t& origin_asn) {
 void append_announce_events(const json& data,
                             const PeerInfo& peer,
                             std::uint64_t timestamp,
-                            std::vector<BgpEvent>& events) {
+                            void* context,
+                            ris_live_parser_detail::EventSinkFn on_event,
+                            std::size_t& emitted_events) {
     uint32_t origin_asn = 0;
     if (!try_get_origin_asn(data, origin_asn)) {
         return;
@@ -88,13 +90,14 @@ void append_announce_events(const json& data,
                 continue;
             }
 
-            events.push_back(BgpEvent{
+            on_event(context, BgpEvent{
                 EventType::Announce,
                 peer,
                 prefix_value.get<std::string>(),
                 origin_asn,
                 timestamp,
             });
+            ++emitted_events;
         }
     }
 }
@@ -102,7 +105,9 @@ void append_announce_events(const json& data,
 void append_withdraw_events(const json& data,
                             const PeerInfo& peer,
                             std::uint64_t timestamp,
-                            std::vector<BgpEvent>& events) {
+                            void* context,
+                            ris_live_parser_detail::EventSinkFn on_event,
+                            std::size_t& emitted_events) {
     const auto withdrawals_it = data.find("withdrawals");
     if (withdrawals_it == data.end() || !withdrawals_it->is_array()) {
         return;
@@ -113,48 +118,53 @@ void append_withdraw_events(const json& data,
             continue;
         }
 
-        events.push_back(BgpEvent{
+        on_event(context, BgpEvent{
             EventType::Withdraw,
             peer,
             prefix_value.get<std::string>(),
             0,
             timestamp,
         });
+        ++emitted_events;
     }
 }
 
 }  // namespace
 
-std::vector<BgpEvent> parse_ris_live_message(const std::string& text) {
-    std::vector<BgpEvent> events;
+std::size_t ris_live_parser_detail::parse_ris_live_message_impl(const std::string& text,
+                                                                void* context,
+                                                                EventSinkFn on_event) {
+    std::size_t emitted_events = 0;
 
     json outer;
     try {
         outer = json::parse(text);
     } catch (const json::parse_error&) {
         // Assumption: malformed messages are ignored and produce no events.
-        return events;
+        return 0;
     }
 
     if (outer.value("type", "") != "ris_message") {
-        return events;
+        return 0;
     }
 
     const auto data_it = outer.find("data");
     if (data_it == outer.end() || !data_it->is_object()) {
-        return events;
+        return 0;
     }
 
     const json& data = *data_it;
     if (data.value("type", "") != "UPDATE") {
-        return events;
+        return 0;
     }
 
     const PeerInfo peer = build_peer_info(data);
     const std::uint64_t timestamp = get_timestamp_or_zero(data);
 
-    append_announce_events(data, peer, timestamp, events);
-    append_withdraw_events(data, peer, timestamp, events);
+    // Emit events directly into the caller's ingest pipeline. The parsing behavior is unchanged;
+    // this only removes the temporary vector that used to hold all events for one message.
+    append_announce_events(data, peer, timestamp, context, on_event, emitted_events);
+    append_withdraw_events(data, peer, timestamp, context, on_event, emitted_events);
 
-    return events;
+    return emitted_events;
 }

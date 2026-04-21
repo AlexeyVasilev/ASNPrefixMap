@@ -24,7 +24,6 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <vector>
 
 namespace {
 
@@ -94,33 +93,27 @@ std::unique_ptr<BgpSource> create_source(const Config& cfg,
     throw std::runtime_error("Unsupported source: " + cfg.source);
 }
 
-void apply_events(const std::vector<BgpEvent>& events,
-                  PeerRegistry& registry,
-                  RoutingState& state,
-                  IngestionStats& stats,
-                  GrowthStatsTracker& growth_stats) {
-    for (const auto& event : events) {
-        const PeerId peer_id = registry.get_or_add(event.peer);
-        const BinaryPrefix prefix = parse_prefix(event.prefix);
+void apply_event(const BgpEvent& event,
+                 PeerRegistry& registry,
+                 RoutingState& state,
+                 IngestionStats& stats,
+                 GrowthStatsTracker& growth_stats) {
+    const PeerId peer_id = registry.get_or_add(event.peer);
+    const BinaryPrefix prefix = parse_prefix(event.prefix);
 
-        std::visit(
-            [&](const auto& binary_prefix) {
-                if (event.type == EventType::Announce) {
-                    state.announce(peer_id, binary_prefix, event.asn, event.timestamp);
-                    ++stats.announces_applied;
-                    growth_stats.on_announce(event.asn, binary_prefix);
-                } else if (event.type == EventType::Withdraw) {
-                    state.withdraw(peer_id, binary_prefix);
-                    ++stats.withdraws_applied;
-                    growth_stats.on_withdraw(binary_prefix);
-                }
-            },
-            prefix);
-    }
-
-    growth_stats.set_active_prefix_counts(
-        state.active_prefixes_v4_count(),
-        state.active_prefixes_v6_count());
+    std::visit(
+        [&](const auto& binary_prefix) {
+            if (event.type == EventType::Announce) {
+                state.announce(peer_id, binary_prefix, event.asn, event.timestamp);
+                ++stats.announces_applied;
+                growth_stats.on_announce(event.asn, binary_prefix);
+            } else if (event.type == EventType::Withdraw) {
+                state.withdraw(peer_id, binary_prefix);
+                ++stats.withdraws_applied;
+                growth_stats.on_withdraw(binary_prefix);
+            }
+        },
+        prefix);
 }
 
 void print_stats(const IngestionStats& stats) {
@@ -213,14 +206,22 @@ int main() {
             ++stats.raw_messages_received;
             growth_stats.on_message_received();
 
-            const std::vector<BgpEvent> events = parse_ris_live_message(message);
-            stats.parsed_events_total += events.size();
-            growth_stats.on_parsed_events(events.size());
+            const std::size_t emitted_events = parse_ris_live_message(
+                message,
+                [&](const BgpEvent& event) {
+                    // The parser now feeds events directly into the ingest path, so we avoid
+                    // allocating a temporary vector before PeerRegistry/prefix/state processing.
+                    apply_event(event, peer_registry, state, stats, growth_stats);
+                });
+            stats.parsed_events_total += emitted_events;
+            growth_stats.on_parsed_events(emitted_events);
 
-            if (events.empty()) {
+            if (emitted_events == 0) {
                 ++stats.ignored_messages;
             } else {
-                apply_events(events, peer_registry, state, stats, growth_stats);
+                growth_stats.set_active_prefix_counts(
+                    state.active_prefixes_v4_count(),
+                    state.active_prefixes_v6_count());
             }
 
             if (cfg.max_messages != 0 && stats.raw_messages_received >= cfg.max_messages) {

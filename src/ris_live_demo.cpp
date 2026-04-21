@@ -5,7 +5,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <vector>
 
 namespace {
 
@@ -30,17 +29,15 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        const std::vector<BgpEvent> events = parse_ris_live_message(line);
-        std::cout << "message -> " << events.size() << " event(s)\n";
-
-        for (const auto& event : events) {
+        const std::size_t emitted_events = parse_ris_live_message(line, [&](const BgpEvent& event) {
             std::cout << event_type_to_string(event.type)
                       << "\tpeer=" << PeerRegistry::make_key(event.peer)
                       << "\tprefix=" << event.prefix
                       << "\tasn=" << event.asn
                       << "\ttimestamp=" << event.timestamp
                       << '\n';
-        }
+        });
+        std::cout << "message -> " << emitted_events << " event(s)\n";
     }
 
     return 0;
