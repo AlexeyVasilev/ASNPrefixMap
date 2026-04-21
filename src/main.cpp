@@ -1,4 +1,3 @@
-#include "bgp_event.h"
 #include "error_format.h"
 #include "config.h"
 #include "parser/ris_live_parser.h"
@@ -93,21 +92,25 @@ std::unique_ptr<BgpSource> create_source(const Config& cfg,
     throw std::runtime_error("Unsupported source: " + cfg.source);
 }
 
-void apply_event(const BgpEvent& event,
+void apply_event(EventType type,
+                 const PeerInfo& peer,
+                 const std::string& prefix_text,
+                 uint32_t origin_asn,
+                 std::uint64_t timestamp,
                  PeerRegistry& registry,
                  RoutingState& state,
                  IngestionStats& stats,
                  GrowthStatsTracker& growth_stats) {
-    const PeerId peer_id = registry.get_or_add(event.peer);
-    const BinaryPrefix prefix = parse_prefix(event.prefix);
+    const PeerId peer_id = registry.get_or_add(peer);
+    const BinaryPrefix prefix = parse_prefix(prefix_text);
 
     std::visit(
         [&](const auto& binary_prefix) {
-            if (event.type == EventType::Announce) {
-                state.announce(peer_id, binary_prefix, event.asn, event.timestamp);
+            if (type == EventType::Announce) {
+                state.announce(peer_id, binary_prefix, origin_asn, timestamp);
                 ++stats.announces_applied;
-                growth_stats.on_announce(event.asn, binary_prefix);
-            } else if (event.type == EventType::Withdraw) {
+                growth_stats.on_announce(origin_asn, binary_prefix);
+            } else if (type == EventType::Withdraw) {
                 state.withdraw(peer_id, binary_prefix);
                 ++stats.withdraws_applied;
                 growth_stats.on_withdraw(binary_prefix);
@@ -191,10 +194,22 @@ int main() {
 
             const std::size_t emitted_events = parse_ris_live_message(
                 message,
-                [&](const BgpEvent& event) {
-                    // The parser now feeds events directly into the ingest path, so we avoid
-                    // allocating a temporary vector before PeerRegistry/prefix/state processing.
-                    apply_event(event, peer_registry, state, stats, growth_stats);
+                [&](EventType type,
+                    const PeerInfo& peer,
+                    const std::string& prefix,
+                    uint32_t origin_asn,
+                    std::uint64_t timestamp) {
+                    // The parser now feeds raw event fields straight into the ingest path,
+                    // avoiding both the temporary event vector and a temporary BgpEvent object.
+                    apply_event(type,
+                                peer,
+                                prefix,
+                                origin_asn,
+                                timestamp,
+                                peer_registry,
+                                state,
+                                stats,
+                                growth_stats);
                 });
             stats.parsed_events_total += emitted_events;
             growth_stats.on_parsed_events(emitted_events);

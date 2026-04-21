@@ -90,13 +90,10 @@ void append_announce_events(const json& data,
                 continue;
             }
 
-            on_event(context, BgpEvent{
-                EventType::Announce,
-                peer,
-                prefix_value.get<std::string>(),
-                origin_asn,
-                timestamp,
-            });
+            // Pass the prefix string directly from the parsed JSON storage into the callback.
+            // The caller consumes it immediately, so no temporary BgpEvent object is needed.
+            const std::string& prefix = prefix_value.get_ref<const std::string&>();
+            on_event(context, EventType::Announce, peer, prefix, origin_asn, timestamp);
             ++emitted_events;
         }
     }
@@ -118,13 +115,8 @@ void append_withdraw_events(const json& data,
             continue;
         }
 
-        on_event(context, BgpEvent{
-            EventType::Withdraw,
-            peer,
-            prefix_value.get<std::string>(),
-            0,
-            timestamp,
-        });
+        const std::string& prefix = prefix_value.get_ref<const std::string&>();
+        on_event(context, EventType::Withdraw, peer, prefix, 0, timestamp);
         ++emitted_events;
     }
 }

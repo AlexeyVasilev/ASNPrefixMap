@@ -1,4 +1,3 @@
-#include "bgp_event.h"
 #include "parser/ris_live_parser.h"
 #include "peer/peer_registry.h"
 
@@ -29,12 +28,18 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        const std::size_t emitted_events = parse_ris_live_message(line, [&](const BgpEvent& event) {
-            std::cout << event_type_to_string(event.type)
-                      << "\tpeer=" << PeerRegistry::make_key(event.peer)
-                      << "\tprefix=" << event.prefix
-                      << "\tasn=" << event.asn
-                      << "\ttimestamp=" << event.timestamp
+        const std::size_t emitted_events = parse_ris_live_message(
+            line,
+            [&](EventType type,
+                const PeerInfo& peer,
+                const std::string& prefix,
+                uint32_t origin_asn,
+                std::uint64_t timestamp) {
+            std::cout << event_type_to_string(type)
+                      << "\tpeer=" << PeerRegistry::make_key(peer)
+                      << "\tprefix=" << prefix
+                      << "\tasn=" << origin_asn
+                      << "\ttimestamp=" << timestamp
                       << '\n';
         });
         std::cout << "message -> " << emitted_events << " event(s)\n";
