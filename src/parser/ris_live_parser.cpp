@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <string>
+#include <string_view>
 
 #include <nlohmann/json.hpp>
 
@@ -10,13 +11,22 @@ using json = nlohmann::json;
 
 namespace {
 
-std::string get_string_or_empty(const json& object, const char* key) {
+const std::string& get_string_ref_or_empty(const json& object, const char* key) {
+    static const std::string kEmpty;
+
     const auto it = object.find(key);
     if (it == object.end() || !it->is_string()) {
-        return "";
+        return kEmpty;
     }
 
-    return it->get<std::string>();
+    return it->get_ref<const std::string&>();
+}
+
+bool has_string_value(const json& object, const char* key, std::string_view expected) {
+    const auto it = object.find(key);
+    return it != object.end() &&
+           it->is_string() &&
+           it->get_ref<const std::string&>() == expected;
 }
 
 uint32_t get_uint32_or_zero(const json& object, const char* key) {
@@ -38,9 +48,11 @@ std::uint64_t get_timestamp_or_zero(const json& object) {
 }
 
 PeerInfo build_peer_info(const json& data) {
+    // PeerInfo intentionally stays owning, so we only use JSON string references long enough
+    // to copy them once into the returned PeerInfo object.
     return PeerInfo{
-        get_string_or_empty(data, "host"),
-        get_string_or_empty(data, "peer"),
+        get_string_ref_or_empty(data, "host"),
+        get_string_ref_or_empty(data, "peer"),
         get_uint32_or_zero(data, "peer_asn"),
     };
 }
@@ -115,6 +127,8 @@ void append_withdraw_events(const json& data,
             continue;
         }
 
+        // Safe for the same reason as announce prefixes: the callback consumes the reference
+        // immediately and does not keep it beyond this synchronous parser call.
         const std::string& prefix = prefix_value.get_ref<const std::string&>();
         on_event(context, EventType::Withdraw, peer, prefix, 0, timestamp);
         ++emitted_events;
@@ -136,7 +150,7 @@ std::size_t ris_live_parser_detail::parse_ris_live_message_impl(const std::strin
         return 0;
     }
 
-    if (outer.value("type", "") != "ris_message") {
+    if (!has_string_value(outer, "type", "ris_message")) {
         return 0;
     }
 
@@ -146,7 +160,7 @@ std::size_t ris_live_parser_detail::parse_ris_live_message_impl(const std::strin
     }
 
     const json& data = *data_it;
-    if (data.value("type", "") != "UPDATE") {
+    if (!has_string_value(data, "type", "UPDATE")) {
         return 0;
     }
 
